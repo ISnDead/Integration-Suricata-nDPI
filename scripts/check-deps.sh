@@ -2,47 +2,47 @@
 set -euo pipefail
 
 # -----------------------------
-# SBOM + Trivy dependency/vuln check
+# Проверка зависимостей и уязвимостей через SBOM + Trivy
 # -----------------------------
-# Modes:
-#   image: scan container image reference (recommended in CI)
-#   fs:    scan filesystem path (e.g. unpacked rootfs)
+# Режимы:
+#   image: скан контейнерного образа (рекомендуется для CI)
+#   fs:    скан файловой системы по пути (например, распакованный rootfs)
 #
-# Outputs:
-#   artifacts/sbom.cdx.json         CycloneDX SBOM
-#   artifacts/vuln.report.json      Trivy JSON report (filtered by severity)
-#   artifacts/vuln.report.txt       Human-readable table
+# Артефакты:
+#   artifacts/sbom.cdx.json         SBOM в формате CycloneDX (список компонентов/зависимостей)
+#   artifacts/vuln.report.json      JSON-отчёт Trivy по уязвимостям (с фильтром по SEVERITY)
+#   artifacts/vuln.report.txt       Человекочитаемый отчёт (таблица) из JSON
 #
-# Exit codes:
-#   0 - OK (no findings at/above severity threshold)
-#   1 - Findings detected (policy violated)
-#   2 - Script usage error / missing tooling
+# Коды выхода:
+#   0 - ОК (нет находок уровня SEVERITY и выше)
+#   1 - Найдены уязвимости по политике (pipeline должен упасть)
+#   2 - Ошибка использования / не хватает утилит / внутренняя ошибка Trivy
 
 MODE="${MODE:-image}"                  # image|fs
-TARGET="${TARGET:-}"                   # image ref OR filesystem path
+TARGET="${TARGET:-}"                   # имя образа (image:tag) или путь к директории (fs)
 OUT_DIR="${OUT_DIR:-artifacts}"
 
-# Policy
-SEVERITY="${SEVERITY:-HIGH,CRITICAL}"  # what counts as failure
+# Политика
+SEVERITY="${SEVERITY:-HIGH,CRITICAL}"  # при каких уровнях "падаем"
 EXIT_CODE_ON_FINDINGS="${EXIT_CODE_ON_FINDINGS:-1}"
 
-# Trivy behavior
-SCANNERS="${SCANNERS:-vuln}"           # vuln | vuln,license (if you want license findings too)
+# Поведение Trivy
+SCANNERS="${SCANNERS:-vuln}"           # vuln | vuln,license (если нужно проверять ещё и лицензии)
 TRIVY_TIMEOUT="${TRIVY_TIMEOUT:-5m}"
 TRIVY_CACHE_DIR="${TRIVY_CACHE_DIR:-$OUT_DIR/.trivy-cache}"
 
-# Naming
+# Имена файлов
 SBOM_FILE="${SBOM_FILE:-$OUT_DIR/sbom.cdx.json}"
 JSON_REPORT="${JSON_REPORT:-$OUT_DIR/vuln.report.json}"
 TXT_REPORT="${TXT_REPORT:-$OUT_DIR/vuln.report.txt}"
 
 usage() {
   cat <<EOF
-Usage:
+Использование:
   MODE=image TARGET=<image:tag> ./scripts/check-deps.sh
   MODE=fs    TARGET=/path/to/rootfs ./scripts/check-deps.sh
 
-Env knobs:
+Переменные окружения:
   MODE=image|fs
   TARGET=...
   OUT_DIR=artifacts
@@ -52,29 +52,30 @@ Env knobs:
   TRIVY_TIMEOUT=5m
   TRIVY_CACHE_DIR=artifacts/.trivy-cache
 
-Examples:
+Примеры:
   MODE=image TARGET=registry.local/suri-ndpi:1.2.3 ./scripts/check-deps.sh
   MODE=fs TARGET=/ ./scripts/check-deps.sh
 EOF
 }
 
 log()  { echo "[check-deps] $*"; }
-err()  { echo "[check-deps][ERROR] $*" >&2; }
+err()  { echo "[check-deps][ОШИБКА] $*" >&2; }
 
 need_cmd() {
-  command -v "$1" >/dev/null 2>&1 || { err "Missing command: $1"; exit 2; }
+  command -v "$1" >/dev/null 2>&1 || { err "Не найдена команда: $1"; exit 2; }
 }
 
 main() {
   if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
-    usage; exit 0
+    usage
+    exit 0
   fi
 
   need_cmd trivy
   mkdir -p "$OUT_DIR" "$TRIVY_CACHE_DIR"
 
   if [[ -z "$TARGET" ]]; then
-    err "TARGET is required"
+    err "Не задан TARGET"
     usage
     exit 2
   fi
@@ -82,20 +83,20 @@ main() {
   export TRIVY_CACHE_DIR
   export TRIVY_TIMEOUT
 
-  # 1) Generate SBOM (CycloneDX)
-  log "Generating SBOM (CycloneDX) -> $SBOM_FILE"
+  # 1) Генерируем SBOM (CycloneDX)
+  log "Генерация SBOM (CycloneDX) -> $SBOM_FILE"
   if [[ "$MODE" == "image" ]]; then
     trivy image --format cyclonedx --output "$SBOM_FILE" "$TARGET"
   elif [[ "$MODE" == "fs" ]]; then
-    [[ -d "$TARGET" ]] || { err "TARGET path does not exist or not a directory: $TARGET"; exit 2; }
+    [[ -d "$TARGET" ]] || { err "TARGET не существует или не директория: $TARGET"; exit 2; }
     trivy fs --format cyclonedx --output "$SBOM_FILE" "$TARGET"
   else
-    err "Unknown MODE=$MODE (use image|fs)"
+    err "Неизвестный MODE=$MODE (доступно: image|fs)"
     exit 2
   fi
 
-  # 2) Scan SBOM with policy
-  log "Scanning SBOM with Trivy (scanners=$SCANNERS severity=$SEVERITY)"
+  # 2) Сканируем SBOM по уязвимостям (и/или лицензиям) + применяем политику выхода
+  log "Сканирование SBOM Trivy (scanners=$SCANNERS severity=$SEVERITY)"
   set +e
   trivy sbom "$SBOM_FILE" \
     --scanners "$SCANNERS" \
@@ -106,26 +107,26 @@ main() {
   rc=$?
   set -e
 
-  # 3) Make a human-readable report from JSON
-  log "Converting JSON -> table -> $TXT_REPORT"
+  # 3) Делаем человекочитаемый отчёт из JSON
+  log "Конвертация отчёта JSON -> таблица -> $TXT_REPORT"
   trivy convert --format table "$JSON_REPORT" > "$TXT_REPORT" || true
 
-  # Summary
-  log "Artifacts:"
+  # Итог
+  log "Артефакты:"
   log "  SBOM:   $SBOM_FILE"
   log "  JSON:   $JSON_REPORT"
   log "  TABLE:  $TXT_REPORT"
 
   if [[ "$rc" -eq 0 ]]; then
-    log "OK: no findings at/above $SEVERITY"
+    log "ОК: уязвимостей уровня $SEVERITY не найдено"
     exit 0
   elif [[ "$rc" -eq "$EXIT_CODE_ON_FINDINGS" ]]; then
-    err "POLICY FAIL: findings at/above $SEVERITY (exit $rc)"
+    err "ПОЛИТИКА НЕ ПРОЙДЕНА: найдены уязвимости уровня $SEVERITY (exit $rc)"
     exit "$rc"
   else
-    err "Trivy error (exit $rc). Check logs/report."
+    err "Ошибка Trivy (exit $rc). Смотрите логи/отчёт."
     exit 2
   fi
 }
 
-main "$@
+main "$@"
