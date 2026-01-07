@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"time"
 )
 
 // Runner управляет жизненным циклом интеграционного сервиса
@@ -23,10 +22,10 @@ func (r *Runner) Start(ctx context.Context) error {
 
 	// Эмуляция вызовов из папки /integration согласно ТЗ
 	log.Println("[nDPI] Валидация конфигурации...")
-	// В будущем здесь вызов: integration.ValidateNDPIConfig() 
-	
+	// В будущем здесь вызов: integration.ValidateNDPIConfig()
+
 	log.Println("[Suricata] Проверка статуса и подключение...")
-	// В будущем здесь вызов: integration.ConnectSuricata() 
+	// В будущем здесь вызов: integration.ConnectSuricata()
 
 	fmt.Println("Сервис успешно запущен. Мониторинг активен.")
 
@@ -38,6 +37,6 @@ func (r *Runner) Start(ctx context.Context) error {
 // Stop корректно завершает работу сервиса без повреждения данных
 func (r *Runner) Stop() {
 	log.Println("Выполнение Graceful Shutdown...")
-	// Здесь будет логика корректного разрыва соединений 
+	// Здесь будет логика корректного разрыва соединений
 	fmt.Println("Все модули остановлены. Выход.")
 }
