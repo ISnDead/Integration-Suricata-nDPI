@@ -1,4 +1,4 @@
-name: build
+name: check
 
 on:
   push:
@@ -6,10 +6,12 @@ on:
 
 jobs:
   build:
+    name: Trivy Scan and Upload to Code Scanning
     runs-on: ubuntu-24.04
+
     permissions:
-      contents: read
-      security-events: write
+      contents: read           # Для checkout
+      security-events: write   # Требуется для загрузки SARIF через REST API
 
     steps:
       - name: Checkout code
@@ -28,8 +30,25 @@ jobs:
           severity: HIGH,CRITICAL
           skip-dirs: .git
 
-      - name: Upload Trivy results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: trivy-results.sarif
-          category: trivy-fs-scan
+      - name: Validate SARIF (optional but recommended)
+        run: |
+          if ! command -v jq &> /dev/null; then
+            echo "jq not found, skipping validation"
+            exit 0
+          fi
+          if ! jq empty trivy-results.sarif; then
+            echo "Invalid SARIF file"
+            exit 1
+          fi
+
+      - name: Upload Trivy results to GitHub Code Scanning
+        run: |
+          # Сжимаем SARIF в gzip и отправляем через REST API
+          gzip -c trivy-results.sarif | \
+          curl -L -X POST \
+            -H "Accept: application/vnd.github.v3+json" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Content-Type: application/zip" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            --data-binary @- \
+            "https://api.github.com/repos/${{ github.repository }}/code-scanning/sarifs"
