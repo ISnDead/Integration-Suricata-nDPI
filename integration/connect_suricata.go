@@ -5,7 +5,6 @@ import (
 	"net"
 	"time"
 
-	// Импорт логгера из вашего пакета pkg/
 	"integration-suricata-ndpi/pkg/logger"
 
 	"go.uber.org/zap"
@@ -30,7 +29,7 @@ func ConnectSuricata() (*SuricataClient, error) {
 		return nil, fmt.Errorf("ошибка подключения к %s: %v", socketPath, err)
 	}
 
-	logger.Log.Info("Соединение с Suricata Control Socket успешно установлено",
+	logger.Log.Info("Соединение с Suricata Socket успешно установлено",
 		zap.String("status", "connected"))
 
 	// Возвращаем структуру клиента, определенную в types.go
