@@ -11,8 +11,8 @@ jobs:
     runs-on: ubuntu-24.04
 
     permissions:
-      contents: read
-      security-events: write
+      contents: read           # Для checkout
+      security-events: write   # Для загрузки SARIF
 
     steps:
       - name: Checkout code
@@ -20,6 +20,10 @@ jobs:
 
       - name: Run Trivy filesystem scan
         uses: aquasecurity/trivy-action@0.33.1
+        env:
+          # Отключаем телеметрию Trivy
+          TRIVY_NO_TELEMETRY: true
+          TRIVY_QUIET: true
         with:
           scan-type: 'fs'
           ignore-unfixed: true
@@ -28,8 +32,9 @@ jobs:
           severity: 'HIGH,CRITICAL'
           skip-dirs: '.git'
 
-      - name: Upload Trivy scan results to GitHub Security
+      - name: Upload Trivy results to GitHub Security
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: 'trivy-results.sarif'
-          category: 'trivy-fs-scan'  # ← явно задаём категорию, чтобы избежать ошибки
+          category: 'trivy-fs-scan'  # ← явно задано, чтобы не запрашивать workflow run
+        # ⚠️ НЕ используем wait-for-processing: true — он вызывает API и ошибку
