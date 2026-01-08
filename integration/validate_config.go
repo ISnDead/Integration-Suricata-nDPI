@@ -10,45 +10,36 @@ import (
 	"go.uber.org/zap"
 )
 
-// ValidateNDPIConfig выполняет предварительную проверку наличия необходимых
-// конфигурационных ресурсов в локальном репозитории микросервиса.
+// ValidateNDPIConfig проверяет наличие локальных ресурсов (папка правил nDPI).
 func ValidateNDPIConfig() error {
-	// NDPIRulesLocalPath определен в types.go как "rules/ndpi/"
-	logger.Log.Info("Запуск валидации локальных ресурсов nDPI",
-		zap.String("target_path", NDPIRulesLocalPath))
+	logger.Log.Info("Проверка локальных ресурсов nDPI",
+		zap.String("rules_path", NDPIRulesLocalPath))
 
-	// Проверка физического существования директории в корне проекта.
-	// Ошибка на этом этапе блокирует дальнейший запуск системы.
+	// Проверяем, что папка существует и это директория.
 	info, err := os.Stat(NDPIRulesLocalPath)
-	if os.IsNotExist(err) {
-		logger.Log.Error("Локальная директория правил не обнаружена",
-			zap.String("path", NDPIRulesLocalPath))
-		return fmt.Errorf("критическая ошибка: отсутствует папка %s", NDPIRulesLocalPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			logger.Log.Error("Папка правил не найдена", zap.String("path", NDPIRulesLocalPath))
+			return fmt.Errorf("отсутствует папка %s", NDPIRulesLocalPath)
+		}
+		return fmt.Errorf("не удалось проверить папку %s: %w", NDPIRulesLocalPath, err)
 	}
-
-	// Убеждаемся, что путь ведет именно к директории.
 	if !info.IsDir() {
-		return fmt.Errorf("объект по пути %s не является директорией", NDPIRulesLocalPath)
+		return fmt.Errorf("путь %s не является директорией", NDPIRulesLocalPath)
 	}
 
-	// Сканирование содержимого для определения готовности набора правил.
-	// Используется Glob для поиска любых файлов в целевой папке.
+	// Проверяем, есть ли файлы правил (пустая папка — не фатально, но предупреждаем).
 	files, err := filepath.Glob(filepath.Join(NDPIRulesLocalPath, "*"))
 	if err != nil {
-		logger.Log.Error("Ошибка при чтении списка файлов правил", zap.Error(err))
-		return err
+		logger.Log.Error("Ошибка чтения списка файлов правил", zap.Error(err))
+		return fmt.Errorf("ошибка чтения файлов в %s: %w", NDPIRulesLocalPath, err)
 	}
 
-	// Логирование текущего состояния наполнения репозитория.
-	// Пустая папка не является фатальной ошибкой, но требует уведомления.
 	if len(files) == 0 {
-		logger.Log.Warn("В локальном хранилище отсутствуют файлы правил nDPI",
-			zap.String("path", NDPIRulesLocalPath))
+		logger.Log.Warn("Папка правил пуста", zap.String("path", NDPIRulesLocalPath))
 	} else {
-		logger.Log.Info("Обнаружены локальные файлы конфигурации nDPI",
-			zap.Int("file_count", len(files)))
+		logger.Log.Info("Файлы правил найдены", zap.Int("file_count", len(files)))
 	}
 
-	logger.Log.Info("Валидация конфигурационной среды успешно завершена")
 	return nil
 }

@@ -10,86 +10,84 @@ import (
 	"go.uber.org/zap"
 )
 
-// Runner координирует работу микросервиса, управляя жизненным циклом
-// и последовательностью этапов интеграции nDPI в Suricata IDS.
+// Runner — оркестратор шагов интеграции nDPI с Suricata.
 type Runner struct {
 	suricataClient *integration.SuricataClient
 }
 
-// NewRunner инициализирует новый экземпляр управляющего контроллера.
 func NewRunner() *Runner {
 	return &Runner{}
 }
 
-// Start запускает последовательную цепочку инициализации.
-// На каждом этапе проверяется состояние контекста для обеспечения корректной остановки (Graceful Shutdown).
+// Start выполняет шаги запуска и ждёт отмены контекста.
+// После отмены контекста вызывает Stop().
 func (r *Runner) Start(ctx context.Context) error {
-	logger.Log.Info("Запуск интеграционного процесса...")
+	logger.Log.Info("Старт процесса интеграции")
 
-	// ЭТАП 1: Валидация правил nDPI.
+	// Шаг 1: Валидация nDPI конфигурации/правил.
 	if err := r.checkContext(ctx); err != nil {
 		return err
 	}
 	if err := integration.ValidateNDPIConfig(); err != nil {
-		return fmt.Errorf("этап 1 (валидация) не пройден: %w", err)
+		return fmt.Errorf("шаг 1 (валидация) не пройден: %w", err)
 	}
 
-	// ЭТАП 2: Управление состоянием системной службы Suricata.
+	// Шаг 2: Проверка доступности Suricata (без sudo/systemctl).
 	if err := r.checkContext(ctx); err != nil {
 		return err
 	}
 	if err := integration.EnsureSuricataRunning(); err != nil {
-		return fmt.Errorf("этап 2 (служба) не пройден: %w", err)
+		return fmt.Errorf("шаг 2 (suricata) не пройден: %w", err)
 	}
 
-	// ЭТАП 3: Установка соединения с управляющим Unix-сокетом.
+	// Шаг 3: Подключение к управляющему unix-сокету Suricata.
 	if err := r.checkContext(ctx); err != nil {
 		return err
 	}
 	client, err := integration.ConnectSuricata()
 	if err != nil {
-		return fmt.Errorf("этап 3 (подключение) не пройден: %w", err)
+		return fmt.Errorf("шаг 3 (подключение) не пройден: %w", err)
 	}
 	r.suricataClient = client
 
-	// ЭТАП 4: Применение динамической конфигурации и обновление правил.
+	// Шаг 4: Применение конфигурации/перезагрузка.
 	if err := r.checkContext(ctx); err != nil {
 		return err
 	}
 	if err := integration.ApplyConfig(r.suricataClient); err != nil {
-		return fmt.Errorf("этап 4 (применение) не пройден: %w", err)
+		return fmt.Errorf("шаг 4 (применение) не пройден: %w", err)
 	}
 
-	logger.Log.Info("Микросервис успешно запущен. Система находится в режиме мониторинга.")
+	logger.Log.Info("Интеграция запущена, ожидание сигнала остановки")
 
-	// Блокировка до получения сигнала завершения от ОС или родительского контекста.
 	<-ctx.Done()
-
-	// Выполняем очистку ресурсов перед выходом.
 	r.Stop()
 	return nil
 }
 
-// Stop выполняет деинициализацию компонентов и корректно закрывает активные соединения.
+// Stop освобождает ресурсы. Безопасно вызывать несколько раз.
 func (r *Runner) Stop() {
-	logger.Log.Info("Запущена процедура остановки микросервиса...")
+	logger.Log.Info("Остановка процесса интеграции")
 
 	if r.suricataClient != nil && r.suricataClient.Conn != nil {
-		logger.Log.Info("Завершение сессии управления Suricata",
+		logger.Log.Info("Закрытие управляющего сокета Suricata",
 			zap.String("socket", r.suricataClient.Path))
 
 		if err := r.suricataClient.Conn.Close(); err != nil {
-			logger.Log.Error("Не удалось корректно закрыть соединение с сокетом", zap.Error(err))
+			logger.Log.Error("Не удалось закрыть сокет Suricata", zap.Error(err))
 		}
-	}
 
-	logger.Log.Info("Все компоненты успешно остановлены. Завершение процесса.")
+		// Делаем Stop идемпотентным.
+		r.suricataClient.Conn = nil
+	}
+	r.suricataClient = nil
+
+	logger.Log.Info("Остановка завершена")
 }
 
-// checkContext — вспомогательная функция для прерывания цепочки запуска при отмене контекста.
 func (r *Runner) checkContext(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
-		logger.Log.Warn("Запуск прерван внешним сигналом отмены")
+		logger.Log.Warn("Запуск прерван: контекст отменён")
 		return err
 	}
 	return nil

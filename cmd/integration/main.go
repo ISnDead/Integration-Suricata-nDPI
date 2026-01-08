@@ -2,34 +2,36 @@ package main
 
 import (
 	"context"
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
-	
+
+	"integration-suricata-ndpi/pkg/logger"
 	"integration-suricata-ndpi/pkg/runner"
+
+	"go.uber.org/zap"
 )
 
 func main() {
-	log.Println("Запуск интеграционного сервиса Suricata + nDPI")
+	// Инициализация Zap логгера (находится в pkg/logger согласно архитектуре) [cite: 2026-01-07]
+	logger.Init()
+	// Гарантируем сброс буфера логов при выходе
+	defer logger.Sync()
 
-	// Настраиваем перехват сигналов для безопасной остановки 
+	logger.Log.Info("Запуск микросервиса интеграции Suricata + nDPI")
+
+	// Создаем контекст, который отменится при нажатии Ctrl+C или сигнале SIGTERM
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// Инициализация раннера
+	// Инициализируем Runner
 	srv := runner.NewRunner()
 
-	// Запуск в горутине, чтобы не блокировать ожидание системных сигналов
-	go func() {
-		if err := srv.Start(ctx); err != nil {
-			log.Fatalf("Критическая ошибка при работе: %v", err)
-		}
-	}()
+	// Запускаем основной цикл.
+	// Наш Runner сам умеет ждать ctx.Done() и вызывать Stop() внутри себя.
+	if err := srv.Start(ctx); err != nil {
+		logger.Log.Fatal("Фатальная ошибка при работе микросервиса", zap.Error(err))
+	}
 
-	// Ожидание сигнала (Ctrl+C или завершение процесса в Docker)
-	<-ctx.Done()
-	
-	log.Println("Получен сигнал завершения. Останавливаем сервис...")
-	srv.Stop()
+	logger.Log.Info("Микросервис успешно завершил работу")
 }
