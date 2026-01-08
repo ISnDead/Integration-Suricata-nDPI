@@ -10,11 +10,11 @@ jobs:
     name: Build and Scan
     runs-on: ubuntu-24.04
 
-    # Явно задаём минимально необходимые разрешения
+    # Указываем минимальные разрешения (но actions:read всё равно не сработает для GITHUB_TOKEN)
     permissions:
-      contents: read           # Для checkout
-      security-events: write   # Для загрузки SARIF в Security tab
-      # ❗ actions: read — НЕЛЬЗЯ указать здесь, GitHub не поддерживает это разрешение в workflow
+      contents: read
+      security-events: write
+      # actions: read — игнорируется GitHub'ом, поэтому используем внешний токен
 
     steps:
       - name: Checkout code
@@ -22,20 +22,19 @@ jobs:
 
       - name: Run Trivy filesystem scan
         uses: aquasecurity/trivy-action@0.33.1
+        env:
+          # Передаём токен с правами actions:read, чтобы телеметрия могла читать workflow run
+          GH_TOKEN: ${{ secrets.MY_SECRET }}
         with:
           scan-type: 'fs'
           ignore-unfixed: true
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'HIGH,CRITICAL'
-          # Отключаем попытки Trivy использовать GitHub API (если есть)
-          # (на момент 0.33.1 Trivy Action не использует Actions API для telemetry, но на всякий случай)
           skip-dirs: '.git'
 
       - name: Upload Trivy results to GitHub Security
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: 'trivy-results.sarif'
-        # ВАЖНО: НЕ нужно передавать GH_TOKEN вручную!
-        # Экшен upload-sarif использует встроенный GITHUB_TOKEN,
-        # и он имеет достаточно прав благодаря permissions: security-events: write
+        # Этот шаг использует встроенный GITHUB_TOKEN, и ему хватает security-events: write
