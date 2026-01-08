@@ -1,20 +1,24 @@
 name: build
+
 on:
   push:
     branches:
       - main
+
 jobs:
   build:
-    name: Build
+    name: Build and Scan
     runs-on: ubuntu-24.04
+
     permissions:
-      contents: read          # Required to checkout and read repo files
-      security-events: write  # Required to upload SARIF files to Security tab
+      contents: read
+      security-events: write
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Run Trivy vulnerability scanner in repo mode
+      - name: Run Trivy filesystem scan
         uses: aquasecurity/trivy-action@0.33.1
         with:
           scan-type: 'fs'
@@ -22,11 +26,10 @@ jobs:
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'HIGH,CRITICAL'
+          skip-dirs: '.git'
 
-      - name: Upload Trivy scan results to GitHub Security tab
+      - name: Upload Trivy scan results to GitHub Security
         uses: github/codeql-action/upload-sarif@v4
-        env:
-          GH_TOKEN: ${{ secrets.MY_SECRET }}
         with:
           sarif_file: 'trivy-results.sarif'
-
+          category: 'trivy-fs-scan'  # ← явно задаём категорию, чтобы избежать ошибки
