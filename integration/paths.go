@@ -5,13 +5,12 @@ import (
 	"os"
 )
 
-// FirstExistingPath возвращает первый существующий путь из списка.
-// Нужен для смешанной установки (и чтобы не копировать одну и ту же логику в разных файлах).
+// FirstExistingPath возвращает первый путь из списка, который существует в системе.
 func FirstExistingPath(paths []string) (string, error) {
 	for _, p := range paths {
 		if _, err := os.Stat(p); err == nil {
 			return p, nil
 		}
 	}
-	return "", fmt.Errorf("ни один из путей не найден: %v", paths)
+	return "", fmt.Errorf("не найден ни один из путей: %v", paths)
 }

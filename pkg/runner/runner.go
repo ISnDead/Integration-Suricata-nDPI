@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"integration-suricata-ndpi/integration"
+	"integration-suricata-ndpi/internal/config"
 	"integration-suricata-ndpi/pkg/logger"
 
 	"go.uber.org/zap"
@@ -21,22 +22,28 @@ func NewRunner() *Runner {
 
 // Start выполняет шаги запуска и ждёт отмены контекста.
 // После отмены контекста вызывает Stop().
-func (r *Runner) Start(ctx context.Context) error {
+func (r *Runner) Start(ctx context.Context, configPath string) error {
 	logger.Log.Info("Старт процесса интеграции")
 
-	// Шаг 1: Валидация nDPI конфигурации/правил.
+	// Загружаем конфиг микросервиса (пути/кандидаты/команды)
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		return fmt.Errorf("не удалось загрузить config.yaml: %w", err)
+	}
+
+	// Шаг 1: Валидация локальных ресурсов (папка правил + шаблон Suricata).
 	if err := r.checkContext(ctx); err != nil {
 		return err
 	}
-	if err := integration.ValidateNDPIConfig(); err != nil {
+	if err := integration.ValidateLocalResources(cfg.Paths.NDPIRulesLocal, cfg.Paths.SuricataTemplate); err != nil {
 		return fmt.Errorf("шаг 1 (валидация) не пройден: %w", err)
 	}
 
-	// Шаг 2: Проверка доступности Suricata (без sudo/systemctl).
+	// Шаг 2: Проверка доступности Suricata по unix-сокету (без sudo/systemctl).
 	if err := r.checkContext(ctx); err != nil {
 		return err
 	}
-	if err := integration.EnsureSuricataRunning(); err != nil {
+	if err := integration.EnsureSuricataRunning(cfg.Suricata.SocketCandidates); err != nil {
 		return fmt.Errorf("шаг 2 (suricata) не пройден: %w", err)
 	}
 
@@ -44,17 +51,22 @@ func (r *Runner) Start(ctx context.Context) error {
 	if err := r.checkContext(ctx); err != nil {
 		return err
 	}
-	client, err := integration.ConnectSuricata()
+	client, err := integration.ConnectSuricata(cfg.Suricata.SocketCandidates, cfg.Reload.Timeout)
 	if err != nil {
 		return fmt.Errorf("шаг 3 (подключение) не пройден: %w", err)
 	}
 	r.suricataClient = client
 
-	// Шаг 4: Применение конфигурации/перезагрузка.
+	// Шаг 4: Применение конфигурации и reload/reconfigure через suricatasc.
 	if err := r.checkContext(ctx); err != nil {
 		return err
 	}
-	if err := integration.ApplyConfig(r.suricataClient); err != nil {
+	if err := integration.ApplyConfig(
+		cfg.Paths.SuricataTemplate,
+		cfg.Suricata.ConfigCandidates,
+		cfg.Paths.SuricataSC,
+		cfg.Reload.Command,
+	); err != nil {
 		return fmt.Errorf("шаг 4 (применение) не пройден: %w", err)
 	}
 

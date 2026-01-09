@@ -10,36 +10,48 @@ import (
 	"go.uber.org/zap"
 )
 
-// ValidateNDPIConfig проверяет наличие локальных ресурсов (папка правил nDPI).
-func ValidateNDPIConfig() error {
-	logger.Log.Info("Проверка локальных ресурсов nDPI",
-		zap.String("rules_path", NDPIRulesLocalPath))
+// ValidateLocalResources проверяет, что в репозитории есть нужные файлы:
+// 1) папка с правилами nDPI
+// 2) шаблон конфигурации Suricata
+func ValidateLocalResources(ndpiRulesDir string, templatePath string) error {
+	logger.Log.Info("Валидация локальных ресурсов",
+		zap.String("ndpi_rules_dir", ndpiRulesDir),
+		zap.String("template_path", templatePath),
+	)
 
-	// Проверяем, что папка существует и это директория.
-	info, err := os.Stat(NDPIRulesLocalPath)
+	// 1) Папка правил nDPI
+	info, err := os.Stat(ndpiRulesDir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			logger.Log.Error("Папка правил не найдена", zap.String("path", NDPIRulesLocalPath))
-			return fmt.Errorf("отсутствует папка %s", NDPIRulesLocalPath)
+			return fmt.Errorf("не найдена папка правил nDPI: %s", ndpiRulesDir)
 		}
-		return fmt.Errorf("не удалось проверить папку %s: %w", NDPIRulesLocalPath, err)
+		return fmt.Errorf("ошибка доступа к папке правил nDPI (%s): %w", ndpiRulesDir, err)
 	}
 	if !info.IsDir() {
-		return fmt.Errorf("путь %s не является директорией", NDPIRulesLocalPath)
+		return fmt.Errorf("путь правил nDPI не является директорией: %s", ndpiRulesDir)
 	}
 
-	// Проверяем, есть ли файлы правил (пустая папка — не фатально, но предупреждаем).
-	files, err := filepath.Glob(filepath.Join(NDPIRulesLocalPath, "*"))
+	// Не фатально, но полезно предупредить
+	files, err := filepath.Glob(filepath.Join(ndpiRulesDir, "*"))
 	if err != nil {
-		logger.Log.Error("Ошибка чтения списка файлов правил", zap.Error(err))
-		return fmt.Errorf("ошибка чтения файлов в %s: %w", NDPIRulesLocalPath, err)
+		return fmt.Errorf("не удалось прочитать файлы в папке правил (%s): %w", ndpiRulesDir, err)
 	}
-
 	if len(files) == 0 {
-		logger.Log.Warn("Папка правил пуста", zap.String("path", NDPIRulesLocalPath))
-	} else {
-		logger.Log.Info("Файлы правил найдены", zap.Int("file_count", len(files)))
+		logger.Log.Warn("Папка правил nDPI пустая", zap.String("path", ndpiRulesDir))
 	}
 
+	// 2) Шаблон Suricata
+	tmplInfo, err := os.Stat(templatePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("не найден шаблон конфигурации: %s", templatePath)
+		}
+		return fmt.Errorf("ошибка доступа к шаблону (%s): %w", templatePath, err)
+	}
+	if tmplInfo.IsDir() {
+		return fmt.Errorf("шаблон конфигурации не должен быть директорией: %s", templatePath)
+	}
+
+	logger.Log.Info("Локальные ресурсы валидны")
 	return nil
 }

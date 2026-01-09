@@ -10,33 +10,29 @@ import (
 	"go.uber.org/zap"
 )
 
-// ConnectSuricata выполняет подключение к сокету управления Suricata.
-// Это необходимо для реализации "apply без downtime".
-func ConnectSuricata() (*SuricataClient, error) {
-	socketPath, err := FirstExistingPath(SuricataSocketCandidates)
+// ConnectSuricata подключается к управляющему unix-сокету Suricata.
+// Путь выбирается из списка кандидатов (под разные установки /etc и /usr/local).
+func ConnectSuricata(socketCandidates []string, timeout time.Duration) (*SuricataClient, error) {
+	socketPath, err := FirstExistingPath(socketCandidates)
 	if err != nil {
 		return nil, fmt.Errorf("не найден управляющий сокет Suricata: %w", err)
 	}
 
-	logger.Log.Info("Начало процесса подключения к Suricata",
-		zap.String("socket_path", socketPath))
+	logger.Log.Info("Подключение к Suricata", zap.String("socket_path", socketPath))
 
-	// Устанавливаем соединение с таймаутом, чтобы сервис не завис
-	conn, err := net.DialTimeout("unix", socketPath, 5*time.Second)
+	conn, err := net.DialTimeout("unix", socketPath, timeout)
 	if err != nil {
-		logger.Log.Error("Не удалось открыть Unix-сокет",
-			zap.String("path", socketPath),
-			zap.Error(err))
+		logger.Log.Error("Не удалось подключиться к unix-сокету",
+			zap.String("socket_path", socketPath),
+			zap.Error(err),
+		)
 		return nil, fmt.Errorf("ошибка подключения к %s: %w", socketPath, err)
 	}
 
-	// Чтобы чтение/запись по сокету не зависали бесконечно
-	if err := conn.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
-		logger.Log.Warn("Не удалось установить deadline для сокета", zap.Error(err))
-	}
+	// Чтобы чтение/запись не зависали вечно.
+	_ = conn.SetDeadline(time.Now().Add(timeout))
 
-	logger.Log.Info("Соединение с Suricata Socket успешно установлено",
-		zap.String("status", "connected"))
+	logger.Log.Info("Соединение с Suricata установлено", zap.String("socket_path", socketPath))
 
 	return &SuricataClient{
 		Conn: conn,

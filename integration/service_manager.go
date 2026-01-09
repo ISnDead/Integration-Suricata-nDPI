@@ -9,9 +9,9 @@ import (
 	"go.uber.org/zap"
 )
 
-// EnsureSuricataRunning проверяет, что Suricata доступна по unix-сокету.
-func EnsureSuricataRunning() error {
-	socketPath, err := FirstExistingPath(SuricataSocketCandidates)
+// EnsureSuricataRunning проверяет, что Suricata доступна через управляющий unix-сокет.
+func EnsureSuricataRunning(socketCandidates []string) error {
+	socketPath, err := FirstExistingPath(socketCandidates)
 	if err != nil {
 		return fmt.Errorf("suricata недоступна: управляющий сокет не найден: %w", err)
 	}
@@ -23,8 +23,9 @@ func EnsureSuricataRunning() error {
 		return fmt.Errorf("не удалось проверить сокет suricata (%s): %w", socketPath, err)
 	}
 
+	// Проверяем, что это именно сокет
 	if (info.Mode() & os.ModeSocket) == 0 {
-		return fmt.Errorf("suricata недоступна: путь не является unix-сокетом: %s", socketPath)
+		return fmt.Errorf("путь существует, но это не unix-сокет: %s", socketPath)
 	}
 
 	logger.Log.Info("Suricata доступна по сокету", zap.String("socket_path", socketPath))

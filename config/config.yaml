@@ -1,0 +1,19 @@
+http:
+  addr: ":8080"
+
+paths:
+  ndpi_rules_local: "rules/ndpi/"
+  suricata_template: "config/suricata.yaml.tpl"
+  suricatasc: "/usr/local/bin/suricatasc"
+
+suricata:
+  socket_candidates:
+    - "/var/run/suricata/suricata-command.socket"
+    - "/usr/local/var/run/suricata/suricata-command.socket"
+  config_candidates:
+    - "/etc/suricata/suricata.yaml"
+    - "/usr/local/etc/suricata/suricata.yaml"
+
+reload:
+  timeout: "5s"
+  command: "reconfigure"

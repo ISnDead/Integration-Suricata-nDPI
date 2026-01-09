@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"os"
 	"os/signal"
 	"syscall"
@@ -13,25 +14,26 @@ import (
 )
 
 func main() {
-	// Инициализация Zap логгера (находится в pkg/logger согласно архитектуре) [cite: 2026-01-07]
+	// Инициализация логгера
 	logger.Init()
-	// Гарантируем сброс буфера логов при выходе
 	defer logger.Sync()
 
-	logger.Log.Info("Запуск микросервиса интеграции Suricata + nDPI")
+	configPath := flag.String("config", "config/config.yaml", "Путь к файлу конфигурации")
+	flag.Parse()
 
-	// Создаем контекст, который отменится при нажатии Ctrl+C или сигнале SIGTERM
+	logger.Log.Info("Запуск микросервиса интеграции Suricata + nDPI",
+		zap.String("config", *configPath),
+	)
+
+	// Контекст отменится при Ctrl+C или SIGTERM
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// Инициализируем Runner
 	srv := runner.NewRunner()
 
-	// Запускаем основной цикл.
-	// Наш Runner сам умеет ждать ctx.Done() и вызывать Stop() внутри себя.
-	if err := srv.Start(ctx); err != nil {
-		logger.Log.Fatal("Фатальная ошибка при работе микросервиса", zap.Error(err))
+	if err := srv.Start(ctx, *configPath); err != nil {
+		logger.Log.Fatal("Сервис завершился с ошибкой", zap.Error(err))
 	}
 
-	logger.Log.Info("Микросервис успешно завершил работу")
+	logger.Log.Info("Микросервис завершил работу")
 }
