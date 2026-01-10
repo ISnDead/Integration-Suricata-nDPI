@@ -8,12 +8,12 @@ paths:
 
 suricata:
   socket_candidates:
+    - "/run/suricata/suricata-command.socket"
     - "/var/run/suricata/suricata-command.socket"
-    - "/usr/local/var/run/suricata/suricata-command.socket"
   config_candidates:
     - "/etc/suricata/suricata.yaml"
     - "/usr/local/etc/suricata/suricata.yaml"
 
 reload:
   timeout: "5s"
-  command: "reconfigure"
+  command: "reload-rules"
