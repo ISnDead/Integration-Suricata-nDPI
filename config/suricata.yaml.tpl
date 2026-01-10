@@ -15,7 +15,6 @@ vars:
     HOME_NET: "[192.168.0.0/16,10.0.0.0/8,172.16.0.0/12]"
     EXTERNAL_NET: "!$HOME_NET"
 
-    # Common vars referenced by rulesets (ET, etc.)
     HTTP_SERVERS: "$HOME_NET"
     SMTP_SERVERS: "$HOME_NET"
     SQL_SERVERS: "$HOME_NET"
@@ -32,12 +31,17 @@ vars:
 
   port-groups:
     HTTP_PORTS: "80"
-    HTTPS_PORTS: "443"
-    DNS_PORTS: "53"
+    SHELLCODE_PORTS: "!80"
+    ORACLE_PORTS: 1521
     SSH_PORTS: "22"
-    FTP_PORTS: "21"
-    SIP_PORTS: "[5060, 5061]"
+    DNP3_PORTS: "20000"
+    MODBUS_PORTS: "502"
     FILE_DATA_PORTS: "[$HTTP_PORTS,110,143]"
+    FTP_PORTS: "21"
+    GENEVE_PORTS: "6081"
+    VXLAN_PORTS: "4789"
+    TEREDO_PORTS: "3544"
+    SIP_PORTS: "[5060, 5061]"
 
 ##
 ## Step 2: Select outputs to enable

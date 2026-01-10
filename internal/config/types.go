@@ -7,6 +7,7 @@ type Config struct {
 	Paths    PathsConfig    `yaml:"paths"`
 	Suricata SuricataConfig `yaml:"suricata"`
 	Reload   ReloadConfig   `yaml:"reload"`
+	System   SystemConfig   `yaml:"system"`
 }
 
 type HTTPConfig struct {
@@ -27,4 +28,10 @@ type SuricataConfig struct {
 type ReloadConfig struct {
 	Timeout time.Duration `yaml:"timeout"`
 	Command string        `yaml:"command"`
+}
+
+type SystemConfig struct {
+	Systemctl string `yaml:"systemctl"`
+
+	SuricataService string `yaml:"suricata_service"`
 }

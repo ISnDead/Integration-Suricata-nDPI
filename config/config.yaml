@@ -14,6 +14,14 @@ suricata:
     - "/etc/suricata/suricata.yaml"
     - "/usr/local/etc/suricata/suricata.yaml"
 
+apply:
+  overwrite_suricata_yaml: true      # если false - микросервис не пишет /etc/suricata/suricata.yaml
+  restart_if_yaml_changed: true      # если шаблон изменил YAML - делаем рестарт
+
 reload:
-  timeout: "5s"
+  timeout: "3m"
   command: "reload-rules"
+
+system:
+  systemctl: "/usr/bin/systemctl"
+  suricata_service: "suricata"

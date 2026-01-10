@@ -13,4 +13,11 @@ func applyDefaults(cfg *Config) {
 	if cfg.Reload.Command == "" {
 		cfg.Reload.Command = "reconfigure"
 	}
+
+	if cfg.System.Systemctl == "" {
+		cfg.System.Systemctl = "/usr/bin/systemctl"
+	}
+	if cfg.System.SuricataService == "" {
+		cfg.System.SuricataService = "suricata"
+	}
 }

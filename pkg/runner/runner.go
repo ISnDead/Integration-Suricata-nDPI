@@ -66,8 +66,11 @@ func (r *Runner) Start(ctx context.Context, configPath string) error {
 		cfg.Suricata.ConfigCandidates,
 		cfg.Paths.SuricataSC,
 		cfg.Reload.Command,
+		cfg.Reload.Timeout, // time.Duration уже распаршен из YAML ("5s")
+		cfg.System.Systemctl,
+		cfg.System.SuricataService,
 	); err != nil {
-		return fmt.Errorf("шаг 4 (применение) не пройден: %w", err)
+		return err
 	}
 
 	logger.Log.Info("Интеграция запущена, ожидание сигнала остановки")

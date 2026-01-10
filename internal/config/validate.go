@@ -27,5 +27,13 @@ func validate(cfg *Config) error {
 		return fmt.Errorf("config: reload.command is required")
 	}
 
+	if cfg.System.Systemctl == "" {
+		return fmt.Errorf("system.systemctl не задан")
+	}
+	if cfg.System.SuricataService == "" {
+		return fmt.Errorf("system.suricata_service не задан")
+	}
+
 	return nil
+
 }
