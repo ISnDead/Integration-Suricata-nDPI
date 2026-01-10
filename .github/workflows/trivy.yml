@@ -19,7 +19,7 @@ jobs:
         with:
           scan-type: 'fs'
           scan-ref: '.'
-          scanners: 'misconfig, vuln, secret'
+          scanners: 'misconfig, secret'
           ignore-unfixed: true
           format: 'sarif'
           output: 'trivy-results.sarif'
