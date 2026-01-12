@@ -15,12 +15,13 @@ import (
 	"go.uber.org/zap"
 )
 
-// ApplyConfig применяет конфигурацию Suricata:
-//  1. Читает шаблон suricata.yaml.tpl из репозитория.
-//  2. Определяет реальный системный suricata.yaml (из списка кандидатов).
-//  3. Записывает конфиг атомарно (через временный файл + rename).
-//  4. Выполняет reload/reconfigure через suricatasc с таймаутом.
-//     Если suricatasc завис/не ответил за timeout — делаем fallback: systemctl restart suricata.
+// ApplyConfig применяет конфигурацию Suricata максимально безопасно (без дропа сервиса):
+//
+//  1) Читает шаблон suricata.yaml.tpl из репозитория.
+//  2) Определяет реальный системный suricata.yaml (из списка кандидатов).
+//  3) Записывает конфиг атомарно (через временный файл + rename).
+//  4) Делает best-effort reload/reconfigure через suricatasc.
+
 func ApplyConfig(
 	templatePath string,
 	configCandidates []string,
@@ -29,8 +30,13 @@ func ApplyConfig(
 	reloadTimeout time.Duration,
 	systemctlPath string,
 	suricataService string,
-) error {
-	logger.Log.Info("Применение конфигурации Suricata",
+) (ApplyConfigReport, error) {
+	report := ApplyConfigReport{
+		ReloadCommand: reloadCommand,
+		ReloadTimeout: reloadTimeout,
+	}
+
+	logger.Log.Info("Применение конфигурации Suricata (safe apply, no restart)",
 		zap.String("template_path", templatePath),
 		zap.Strings("config_candidates", configCandidates),
 		zap.String("suricatasc", suricatascPath),
@@ -40,174 +46,128 @@ func ApplyConfig(
 		zap.String("suricata_service", suricataService),
 	)
 
-	// 1) Читаем шаблон из репозитория
+	cmdNormalized := strings.TrimSpace(strings.ToLower(reloadCommand))
+	if cmdNormalized == "shutdown" {
+		return report, fmt.Errorf("reload_command=shutdown запрещён: микросервис не должен останавливать Suricata")
+	}
+	if cmdNormalized == "" {
+		report.ReloadStatus = ReloadOK
+		report.Warnings = append(report.Warnings, "reload_command пустой: конфиг записан, reload не выполнялся")
+		logger.Log.Warn("reload_command пустой — reload не выполняем (это безопасно)")
+		return report, nil
+	}
+
 	tmplData, err := os.ReadFile(templatePath)
 	if err != nil {
-		return fmt.Errorf("не удалось прочитать шаблон %s: %w", templatePath, err)
+		return report, fmt.Errorf("не удалось прочитать шаблон %s: %w", templatePath, err)
 	}
 
-	// 2) Находим системный путь suricata.yaml
 	targetConfigPath, err := FirstExistingPath(configCandidates)
 	if err != nil {
-		return fmt.Errorf("не найден системный suricata.yaml среди кандидатов: %w", err)
+		return report, fmt.Errorf("не найден системный suricata.yaml среди кандидатов: %w", err)
 	}
+	report.TargetConfigPath = targetConfigPath
 
-	// 3) Атомарно пишем конфиг на место
 	if err := writeFileAtomic(targetConfigPath, tmplData, 0644); err != nil {
-		return fmt.Errorf("не удалось записать конфиг %s: %w", targetConfigPath, err)
+		return report, fmt.Errorf("не удалось записать конфиг %s: %w", targetConfigPath, err)
 	}
-
 	logger.Log.Info("Конфиг Suricata обновлён", zap.String("path", targetConfigPath))
 
-	// 4) Делаем reload через suricatasc, но ограничиваем по времени.
-	ctx, cancel := context.WithTimeout(context.Background(), reloadTimeout)
+	var ctx context.Context
+	var cancel func()
+	if reloadTimeout > 0 {
+		ctx, cancel = context.WithTimeout(context.Background(), reloadTimeout)
+	} else {
+		ctx, cancel = context.WithCancel(context.Background())
+	}
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, suricatascPath, "-c", reloadCommand)
 	out, err := cmd.CombinedOutput()
+	report.ReloadOutput = strings.TrimSpace(string(out))
 
-	// Если вышли по таймауту — пробуем аварийный перезапуск через systemctl.
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-		logger.Log.Warn("suricatasc не ответил за таймаут — fallback на systemctl restart",
-			zap.Duration("timeout", reloadTimeout),
-			zap.String("command", reloadCommand),
+		report.ReloadStatus = ReloadTimeout
+		report.Warnings = append(report.Warnings,
+			fmt.Sprintf("suricatasc timeout: command=%q timeout=%s", reloadCommand, reloadTimeout),
 		)
 
-		// Ограничиваем ожидание рестарта, чтобы микросервис не висел бесконечно.
-		restartTimeout := 90 * time.Second
-		if reloadTimeout > 0 && reloadTimeout*2 > restartTimeout {
-			restartTimeout = reloadTimeout * 2
+		logger.Log.Warn("suricatasc не ответил за таймаут (restart запрещён). Проверяем что Suricata active",
+			zap.String("command", reloadCommand),
+			zap.Duration("timeout", reloadTimeout),
+		)
+
+		active, state, checkErr := getServiceActiveState(systemctlPath, suricataService)
+		if checkErr != nil {
+			return report, fmt.Errorf("suricatasc timeout, а проверить systemctl is-active не удалось: %w", checkErr)
+		}
+		if !active {
+			return report, fmt.Errorf("suricatasc timeout и Suricata сейчас НЕ active (state=%s)", state)
 		}
 
-		if err := restartServiceAndWaitActive(systemctlPath, suricataService, restartTimeout); err != nil {
-			return fmt.Errorf("suricatasc завис по таймауту (%s), затем fallback restart %s не удался: %w",
-				reloadCommand, suricataService, err)
-		}
-
-		return nil
+		logger.Log.Warn("reload не подтверждён из-за timeout, но Suricata active — продолжаем",
+			zap.String("state", state),
+		)
+		return report, nil
 	}
 
-	// Обычная ошибка suricatasc (не таймаут) — возвращаем как есть.
 	if err != nil {
-		logger.Log.Error("Команда suricatasc завершилась с ошибкой",
-			zap.String("suricatasc", suricatascPath),
+		report.ReloadStatus = ReloadFailed
+		report.Warnings = append(report.Warnings,
+			fmt.Sprintf("suricatasc error: command=%q err=%v output=%q", reloadCommand, err, report.ReloadOutput),
+		)
+
+		logger.Log.Error("suricatasc завершился с ошибкой (restart запрещён)",
 			zap.String("command", reloadCommand),
-			zap.String("output", string(out)),
+			zap.String("output", report.ReloadOutput),
 			zap.Error(err),
 		)
-		return fmt.Errorf("ошибка suricatasc (%s): %w", string(out), err)
+
+		active, state, checkErr := getServiceActiveState(systemctlPath, suricataService)
+		if checkErr != nil {
+			return report, fmt.Errorf("ошибка suricatasc + не удалось проверить systemctl is-active: %w", checkErr)
+		}
+		if !active {
+			return report, fmt.Errorf("ошибка suricatasc и Suricata сейчас НЕ active (state=%s)", state)
+		}
+
+		logger.Log.Warn("reload завершился с ошибкой, но Suricata active — продолжаем",
+			zap.String("state", state),
+		)
+		return report, nil
 	}
 
+	report.ReloadStatus = ReloadOK
 	logger.Log.Info("Suricata успешно применила изменения",
 		zap.String("command", reloadCommand),
-		zap.String("output", string(out)),
+		zap.String("output", report.ReloadOutput),
 	)
 
-	return nil
+	return report, nil
 }
 
-// restartServiceAndWaitActive:
-// 1) Делает systemctl restart --no-block (чтобы не висеть на долгом stop)
-// 2) Ждёт пока сервис реально станет active (с таймаутом)
-func restartServiceAndWaitActive(systemctlPath, service string, timeout time.Duration) error {
-	logger.Log.Warn("Пробуем перезапустить Suricata через systemctl (no-block) и дождаться active",
-		zap.String("service", service),
-		zap.Duration("timeout", timeout),
-	)
-
-	// Запускаем рестарт неблокирующе: это убирает зависание на stop/start job в systemd.
-	startCmd := exec.Command(systemctlPath, "--no-block", "restart", service)
-	startOut, startErr := startCmd.CombinedOutput()
-	if startErr != nil {
-		logger.Log.Error("systemctl restart --no-block завершился с ошибкой",
-			zap.String("service", service),
-			zap.String("output", string(startOut)),
-			zap.Error(startErr),
-		)
-		return fmt.Errorf("systemctl restart --no-block %s error (%s): %w", service, string(startOut), startErr)
-	}
-
-	// Ждём active с таймаутом.
-	waitCtx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
-
-	var lastState string
-
-	for {
-		// Быстрая проверка: is-active.
-		activeCmd := exec.CommandContext(waitCtx, systemctlPath, "is-active", "--quiet", service)
-		if err := activeCmd.Run(); err == nil {
-			logger.Log.Info("Suricata перезапущена и находится в состоянии active (fallback)",
-				zap.String("service", service),
-				zap.String("output", string(startOut)),
-			)
-			return nil
-		}
-
-		// Если сервис стал failed — сразу вываливаемся с диагностикой.
-		failedCmd := exec.CommandContext(waitCtx, systemctlPath, "is-failed", "--quiet", service)
-		if err := failedCmd.Run(); err == nil {
-			st, _ := getServiceState(systemctlPath, service)
-			logger.Log.Error("Сервис перешёл в состояние failed",
-				zap.String("service", service),
-				zap.String("state", st),
-			)
-			return fmt.Errorf("service %s is failed (state=%s)", service, st)
-		}
-
-		// Периодически сохраняем ActiveState/SubState для ошибки по таймауту.
-		if st, err := getServiceState(systemctlPath, service); err == nil && st != "" {
-			lastState = st
-		}
-
-		select {
-		case <-waitCtx.Done():
-			logger.Log.Error("Не дождались active после systemctl restart",
-				zap.String("service", service),
-				zap.Duration("timeout", timeout),
-				zap.String("last_state", lastState),
-			)
-			return fmt.Errorf("timeout waiting for %s to become active (last_state=%s)", service, lastState)
-		case <-ticker.C:
-		}
-	}
-}
-
-// getServiceState возвращает "ActiveState/SubState" через systemctl show (для логов/диагностики).
-func getServiceState(systemctlPath, service string) (string, error) {
-	cmd := exec.Command(systemctlPath, "show", service, "-p", "ActiveState", "-p", "SubState")
+// getServiceActiveState проверяет состояние systemd-сервиса.
+// Возвращает:
+//   - active=true/false
+//   - state="active"/"inactive"/"failed"/...
+//   - error только если проверить невозможно (systemctl недоступен, нет прав, и т.п.)
+func getServiceActiveState(systemctlPath, service string) (bool, string, error) {
+	cmd := exec.Command(systemctlPath, "is-active", service)
 	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", err
+	state := strings.TrimSpace(string(out))
+
+	if err == nil {
+		return state == "active", state, nil
 	}
-	s := string(out)
-	active := pickSystemdValue(s, "ActiveState")
-	sub := pickSystemdValue(s, "SubState")
-	if active == "" && sub == "" {
-		return strings.TrimSpace(s), nil
+
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		return state == "active", state, nil
 	}
-	if sub == "" {
-		return active, nil
-	}
-	return active + "/" + sub, nil
+
+	return false, state, fmt.Errorf("systemctl is-active failed: %w (output=%q)", err, state)
 }
 
-func pickSystemdValue(text, key string) string {
-	for _, line := range strings.Split(text, "\n") {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, key+"=") {
-			return strings.TrimPrefix(line, key+"=")
-		}
-	}
-	return ""
-}
-
-// writeFileAtomic безопасно записывает файл:
-// пишет во временный файл в той же директории и затем делает os.Rename.
-// Это защищает от ситуаций, когда процесс упал и оставил "обрубок" конфига.
 func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
 	dir := filepath.Dir(path)
 
@@ -217,10 +177,7 @@ func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
 	}
 	tmpName := tmp.Name()
 
-	// На случай ошибки — удаляем временный файл.
-	defer func() {
-		_ = os.Remove(tmpName)
-	}()
+	defer func() { _ = os.Remove(tmpName) }()
 
 	if _, err := tmp.Write(data); err != nil {
 		_ = tmp.Close()
