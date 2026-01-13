@@ -35,8 +35,25 @@ func (r *Runner) Start(ctx context.Context, configPath string) error {
 	if err := r.checkContext(ctx); err != nil {
 		return err
 	}
+
+	if err := integration.ValidateNDPIConfig(
+		cfg.Paths.NDPIPluginPath,
+		cfg.Paths.NDPIRulesLocal,
+		cfg.Paths.SuricataTemplate,
+		cfg.Paths.SuricataSC,
+		cfg.Reload.Command,
+		cfg.Reload.Timeout,
+		cfg.NDPI.ExpectedRulesPattern,
+	); err != nil {
+		return fmt.Errorf("шаг 2 (валидация конфигурации nDPI) не пройден: %w", err)
+	}
+
+	if err := r.checkContext(ctx); err != nil {
+		return err
+	}
+
 	if err := integration.EnsureSuricataRunning(cfg.Suricata.SocketCandidates); err != nil {
-		return fmt.Errorf("шаг 2 (suricata socket) не пройден: %w", err)
+		return fmt.Errorf("шаг 3 (suricata socket) не пройден: %w", err)
 	}
 
 	if err := r.checkContext(ctx); err != nil {

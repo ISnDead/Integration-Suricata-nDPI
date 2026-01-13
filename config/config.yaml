@@ -3,8 +3,12 @@ http:
 
 paths:
   ndpi_rules_local: "rules/ndpi/"
+  ndpi_plugin_path: "/usr/local/lib/suricata/ndpi.so"
   suricata_template: "config/suricata.yaml.tpl"
   suricatasc: "/usr/local/bin/suricatasc"
+
+ndpi:
+  expected_rules_pattern: "var/lib/suricata/rules/ndpi/*.rules"
 
 suricata:
   socket_candidates:
@@ -15,8 +19,8 @@ suricata:
     - "/usr/local/etc/suricata/suricata.yaml"
 
 apply:
-  overwrite_suricata_yaml: true      # если false - микросервис не пишет /etc/suricata/suricata.yaml
-  restart_if_yaml_changed: true      # если шаблон изменил YAML - делаем рестарт
+  overwrite_suricata_yaml: true
+  restart_if_yaml_changed: true
 
 reload:
   timeout: "3m"
