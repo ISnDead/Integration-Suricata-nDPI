@@ -1,4 +1,4 @@
-### Integration Suricata + nDPI automates configuration management for Suricata deployments that use the nDPI plugin.**
+### Integration Suricata + nDPI automates configuration management for Suricata deployments that use the nDPI plugin.
 
 ### Key capabilities:
 
