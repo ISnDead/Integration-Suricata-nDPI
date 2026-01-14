@@ -16,6 +16,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
       - name: Create bin dir and add scripts
-        run: mkdir bin && ls && cd bin && mv ../test_rules.sh .
+        run: |
+          mkdir bin && ls
+          cd bin
+          mv ../test_rules.sh .
+          ls
       - name: Run the script
         run: test_rules.sh
