@@ -15,12 +15,7 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      - name: Create bin dir and add scripts
-        run: |
-          pwd
-          mkdir bin && ls
-          cd bin
-          mv ../test_rules.sh .
-          ls
+      - name: Make the script files executable
+        run: chmod +x test_rules.sh
       - name: Run the script
-        run: bin/test_rules.sh
+        run: test_rules.sh
