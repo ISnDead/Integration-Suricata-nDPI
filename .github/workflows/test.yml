@@ -18,4 +18,4 @@ jobs:
       - name: Make the script files executable
         run: chmod +x test_rules.sh
       - name: Run the script
-        run: test_rules.sh
+        run: ./test_rules.sh
