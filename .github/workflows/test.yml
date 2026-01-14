@@ -1,31 +1,21 @@
-name: build
+name: test rules
 on:
   push:
     branches:
-      - main
+      - sobik
 
 jobs:
-  build:
-    name: Build
+  validate_rules:
+    name: check
     runs-on: ubuntu-24.04
-    permissions:
-      contents: read          # Required to checkout and read repo files
-      security-events: write  # Required to upload SARIF files to Security tab
+    defaults:
+      run:
+        shell: sh
+        working-directory: ./scripts
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      - name: Run Trivy misconfig scan
-        uses: aquasecurity/trivy-action@0.33.1
-        with:
-          scan-type: 'fs'
-          scan-ref: '.'
-          scanners: 'vuln,secret,misconfig'
-          ignore-unfixed: true
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-          severity: 'CRITICAL,HIGH'
-
-      - name: Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: 'trivy-results.sarif'
+      - name: Make the script executable
+        run: chmod +x test_rules.sh
+      - name: Run the script
+        run: ./test_rules.sh
