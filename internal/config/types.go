@@ -38,7 +38,7 @@ type ReloadConfig struct {
 	Command string        `yaml:"command"`
 }
 
-type SystemConfig struct {
+type SystemConfig struct { // В текущей версии ApplyConfig не использует systemctl/systemd.
 	Systemctl       string `yaml:"systemctl"`
 	SuricataService string `yaml:"suricata_service"`
 }

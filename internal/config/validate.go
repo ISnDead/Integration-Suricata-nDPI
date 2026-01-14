@@ -1,6 +1,9 @@
 package config
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 func validate(cfg *Config) error {
 	if cfg.Paths.NDPIRulesLocal == "" {
@@ -23,17 +26,11 @@ func validate(cfg *Config) error {
 	if cfg.Reload.Timeout <= 0 {
 		return fmt.Errorf("config: reload.timeout must be > 0")
 	}
-	if cfg.Reload.Command == "" {
-		return fmt.Errorf("config: reload.command is required")
-	}
 
-	if cfg.System.Systemctl == "" {
-		return fmt.Errorf("system.systemctl не задан")
-	}
-	if cfg.System.SuricataService == "" {
-		return fmt.Errorf("system.suricata_service не задан")
+	cmd := strings.TrimSpace(strings.ToLower(cfg.Reload.Command))
+	if cmd == "shutdown" {
+		return fmt.Errorf("config: reload.command=shutdown is forbidden")
 	}
 
 	return nil
-
 }

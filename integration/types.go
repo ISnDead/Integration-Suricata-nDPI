@@ -10,6 +10,13 @@ type SuricataClient struct {
 	Path string
 }
 
+func (c *SuricataClient) Close() error {
+	if c == nil || c.Conn == nil {
+		return nil
+	}
+	return c.Conn.Close()
+}
+
 type ApplyConfigReport struct {
 	TargetConfigPath string
 	ReloadCommand    string

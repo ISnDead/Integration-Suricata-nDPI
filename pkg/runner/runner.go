@@ -11,8 +11,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// Runner — оркестратор шагов интеграции nDPI с Suricata.
-
 type Runner struct{}
 
 func NewRunner() *Runner { return &Runner{} }
@@ -63,14 +61,14 @@ func (r *Runner) Start(ctx context.Context, configPath string) error {
 	report, err := integration.ApplyConfig(
 		cfg.Paths.SuricataTemplate,
 		cfg.Suricata.ConfigCandidates,
+		cfg.Suricata.SocketCandidates,
 		cfg.Paths.SuricataSC,
 		cfg.Reload.Command,
 		cfg.Reload.Timeout,
-		cfg.System.Systemctl,
-		cfg.System.SuricataService,
 	)
+
 	if err != nil {
-		return fmt.Errorf("шаг 3 (apply config) не пройден: %w", err)
+		return fmt.Errorf("шаг 4 (apply config) не пройден: %w", err)
 	}
 
 	if report.ReloadStatus != integration.ReloadOK {

@@ -71,14 +71,22 @@ func ValidateNDPIConfig(
 	if err := mustBeFile(suricatascPath, "suricatasc"); err != nil {
 		return err
 	}
-	if strings.TrimSpace(reloadCommand) == "" {
-		return fmt.Errorf("reloadCommand пустой: нечего отправлять в suricatasc")
+
+	cmdNormalized := strings.TrimSpace(strings.ToLower(reloadCommand))
+	if cmdNormalized == "shutdown" {
+		return fmt.Errorf("reloadCommand=shutdown запрещён")
 	}
+	if cmdNormalized == "" || cmdNormalized == "none" {
+		logger.Log.Warn("reloadCommand пустой/none",
+			zap.String("reload_command", reloadCommand),
+		)
+	}
+
 	if reloadTimeout <= 0 {
 		return fmt.Errorf("reloadTimeout должен быть > 0")
 	}
 
-	logger.Log.Info("Конфигурация nDPI выглядит валидной")
+	logger.Log.Info("Конфигурация nDPI валидна")
 	return nil
 }
 

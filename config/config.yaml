@@ -18,14 +18,10 @@ suricata:
     - "/etc/suricata/suricata.yaml"
     - "/usr/local/etc/suricata/suricata.yaml"
 
-apply:
-  overwrite_suricata_yaml: true
-  restart_if_yaml_changed: true
-
 reload:
   timeout: "3m"
   command: "reload-rules"
 
-system:
+system: 
   systemctl: "/usr/bin/systemctl"
   suricata_service: "suricata"
