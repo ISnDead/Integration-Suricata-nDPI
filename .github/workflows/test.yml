@@ -22,4 +22,4 @@ jobs:
           mv ../test_rules.sh .
           ls
       - name: Run the script
-        run: test_rules.sh
+        run: bin/test_rules.sh
