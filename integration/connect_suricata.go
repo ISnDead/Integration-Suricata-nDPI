@@ -10,8 +10,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// ConnectSuricata подключается к управляющему unix-сокету Suricata.
-// Путь выбирается из списка кандидатов (под разные установки /etc и /usr/local).
 func ConnectSuricata(socketCandidates []string, timeout time.Duration) (*SuricataClient, error) {
 	socketPath, err := FirstExistingPath(socketCandidates)
 	if err != nil {

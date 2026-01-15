@@ -7,19 +7,15 @@ type HTTPConfig struct {
 }
 
 type PathsConfig struct {
-	NDPIRulesLocal string `yaml:"ndpi_rules_local"`
-
-	NDPIPluginPath string `yaml:"ndpi_plugin_path"`
-
+	NDPIRulesLocal   string `yaml:"ndpi_rules_local"`
+	NDPIPluginPath   string `yaml:"ndpi_plugin_path"`
 	SuricataTemplate string `yaml:"suricata_template"`
-
-	SuricataSC string `yaml:"suricatasc"`
+	SuricataSC       string `yaml:"suricatasc"`
 }
 
 type NDPIConfig struct {
 	ExpectedRulesPattern string `yaml:"expected_rules_pattern"`
-
-	Enabled bool `yaml:"enabled"`
+	Enabled              bool   `yaml:"enabled"`
 }
 
 type SuricataConfig struct {
@@ -38,7 +34,7 @@ type ReloadConfig struct {
 	Command string        `yaml:"command"`
 }
 
-type SystemConfig struct { // В текущей версии ApplyConfig не использует systemctl/systemd.
+type SystemConfig struct {
 	Systemctl       string `yaml:"systemctl"`
 	SuricataService string `yaml:"suricata_service"`
 }

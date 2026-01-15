@@ -10,9 +10,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// ValidateLocalResources проверяет, что в репозитории есть нужные файлы:
-// 1) папка с правилами nDPI
-// 2) шаблон конфигурации Suricata
 func ValidateLocalResources(ndpiRulesDir string, templatePath string) error {
 	logger.Log.Info("Валидация локальных ресурсов",
 		zap.String("ndpi_rules_dir", ndpiRulesDir),

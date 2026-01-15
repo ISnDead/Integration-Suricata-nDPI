@@ -11,7 +11,6 @@ var (
 	once sync.Once
 )
 
-// Init инициализирует zap-логгер один раз за процесс.
 func Init() {
 	once.Do(func() {
 		l, err := zap.NewProduction()
@@ -23,7 +22,6 @@ func Init() {
 	})
 }
 
-// Sync корректно сбрасывает буферы логгера.
 func Sync() {
 	_ = Log.Sync()
 }

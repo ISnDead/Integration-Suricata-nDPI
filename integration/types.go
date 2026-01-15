@@ -10,23 +10,34 @@ type SuricataClient struct {
 	Path string
 }
 
-func (c *SuricataClient) Close() error {
-	if c == nil || c.Conn == nil {
-		return nil
-	}
-	return c.Conn.Close()
-}
-
 type ApplyConfigReport struct {
 	TargetConfigPath string
 	ReloadCommand    string
 	ReloadTimeout    time.Duration
+	ReloadStatus     ReloadStatus
+	ReloadOutput     string
+	Warnings         []string
+}
 
-	ReloadStatus ReloadStatus
-	ReloadOutput string
+type ApplyConfigOptions struct {
+	TemplatePath     string
+	ConfigCandidates []string
+	SocketCandidates []string
 
-	// Warnings — например: "suricatasc timeout", "reload failed"
-	Warnings []string
+	SuricataSCPath string
+	ReloadCommand  string
+	ReloadTimeout  time.Duration
+}
+
+type NDPIValidateOptions struct {
+	NDPIPluginPath       string
+	NDPIRulesDir         string
+	SuricataTemplatePath string
+	SuricataSCPath       string
+	ReloadCommand        string
+	ReloadTimeout        time.Duration
+
+	ExpectedRulesPattern string
 }
 
 type ReloadStatus string

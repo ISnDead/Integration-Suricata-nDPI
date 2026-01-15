@@ -7,28 +7,20 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"time"
 
 	"integration-suricata-ndpi/pkg/logger"
 
 	"go.uber.org/zap"
 )
 
-// ApplyConfig применяет конфигурацию Suricata без рестарта службы:
-//
-//  1. Читает шаблон suricata.yaml.tpl из репозитория.
-//  2. Определяет системный suricata.yaml (из списка кандидатов).
-//  3. Записывает конфиг атомарно.
-//  4. Делает best-effort reload/reconfigure через suricatasc.
-//  5. При ошибке/таймауте проверяет, что Suricata остаётся доступной через unix-socket.
-func ApplyConfig(
-	templatePath string,
-	configCandidates []string,
-	socketCandidates []string,
-	suricatascPath string,
-	reloadCommand string,
-	reloadTimeout time.Duration,
-) (ApplyConfigReport, error) {
+func ApplyConfig(opts ApplyConfigOptions) (ApplyConfigReport, error) {
+	templatePath := opts.TemplatePath
+	configCandidates := opts.ConfigCandidates
+	socketCandidates := opts.SocketCandidates
+	suricatascPath := opts.SuricataSCPath
+	reloadCommand := opts.ReloadCommand
+	reloadTimeout := opts.ReloadTimeout
+
 	report := ApplyConfigReport{
 		ReloadCommand: reloadCommand,
 		ReloadTimeout: reloadTimeout,

@@ -34,15 +34,15 @@ func (r *Runner) Start(ctx context.Context, configPath string) error {
 		return err
 	}
 
-	if err := integration.ValidateNDPIConfig(
-		cfg.Paths.NDPIPluginPath,
-		cfg.Paths.NDPIRulesLocal,
-		cfg.Paths.SuricataTemplate,
-		cfg.Paths.SuricataSC,
-		cfg.Reload.Command,
-		cfg.Reload.Timeout,
-		cfg.NDPI.ExpectedRulesPattern,
-	); err != nil {
+	if err := integration.ValidateNDPIConfig(integration.NDPIValidateOptions{
+		NDPIPluginPath:       cfg.Paths.NDPIPluginPath,
+		NDPIRulesDir:         cfg.Paths.NDPIRulesLocal,
+		SuricataTemplatePath: cfg.Paths.SuricataTemplate,
+		SuricataSCPath:       cfg.Paths.SuricataSC,
+		ReloadCommand:        cfg.Reload.Command,
+		ReloadTimeout:        cfg.Reload.Timeout,
+		ExpectedRulesPattern: cfg.NDPI.ExpectedRulesPattern,
+	}); err != nil {
 		return fmt.Errorf("шаг 2 (валидация конфигурации nDPI) не пройден: %w", err)
 	}
 
@@ -58,14 +58,14 @@ func (r *Runner) Start(ctx context.Context, configPath string) error {
 		return err
 	}
 
-	report, err := integration.ApplyConfig(
-		cfg.Paths.SuricataTemplate,
-		cfg.Suricata.ConfigCandidates,
-		cfg.Suricata.SocketCandidates,
-		cfg.Paths.SuricataSC,
-		cfg.Reload.Command,
-		cfg.Reload.Timeout,
-	)
+	report, err := integration.ApplyConfig(integration.ApplyConfigOptions{
+		TemplatePath:     cfg.Paths.SuricataTemplate,
+		ConfigCandidates: cfg.Suricata.ConfigCandidates,
+		SocketCandidates: cfg.Suricata.SocketCandidates,
+		SuricataSCPath:   cfg.Paths.SuricataSC,
+		ReloadCommand:    cfg.Reload.Command,
+		ReloadTimeout:    cfg.Reload.Timeout,
+	})
 
 	if err != nil {
 		return fmt.Errorf("шаг 4 (apply config) не пройден: %w", err)

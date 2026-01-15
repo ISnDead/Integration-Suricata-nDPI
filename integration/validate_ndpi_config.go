@@ -6,22 +6,21 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"integration-suricata-ndpi/pkg/logger"
 
 	"go.uber.org/zap"
 )
 
-func ValidateNDPIConfig(
-	ndpiPluginPath string,
-	ndpiRulesDir string,
-	suricataTemplatePath string,
-	suricatascPath string,
-	reloadCommand string,
-	reloadTimeout time.Duration,
-	expectedNdpiRulesPattern string,
-) error {
+func ValidateNDPIConfig(opts NDPIValidateOptions) error {
+	ndpiPluginPath := opts.NDPIPluginPath
+	ndpiRulesDir := opts.NDPIRulesDir
+	suricataTemplatePath := opts.SuricataTemplatePath
+	suricatascPath := opts.SuricataSCPath
+	reloadCommand := opts.ReloadCommand
+	reloadTimeout := opts.ReloadTimeout
+	expectedNdpiRulesPattern := opts.ExpectedRulesPattern
+
 	logger.Log.Info("Валидация конфигурации nDPI",
 		zap.String("ndpi_plugin_path", ndpiPluginPath),
 		zap.String("ndpi_rules_dir", ndpiRulesDir),
