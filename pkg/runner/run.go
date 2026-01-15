@@ -4,7 +4,7 @@ import "context"
 
 type Service interface {
 	Run(ctx context.Context) error
-	Stop() error
+	Stop()
 }
 
 type Runner struct {
@@ -19,6 +19,6 @@ func (r *Runner) Run(ctx context.Context) error {
 	return r.svc.Run(ctx)
 }
 
-func (r *Runner) Stop() error {
-	return r.svc.Stop()
+func (r *Runner) Stop() {
+	r.svc.Stop()
 }

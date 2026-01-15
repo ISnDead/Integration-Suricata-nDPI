@@ -21,8 +21,10 @@ func (s *integrationService) Run(ctx context.Context) error {
 	return s.runner.Run(ctx, s.configPath)
 }
 
-func (s *integrationService) Stop() error {
-	return s.runner.Stop()
+func (s *integrationService) Stop() {
+	if err := s.runner.Stop(); err != nil {
+		logger.Errorw("Service stop failed", "error", err)
+	}
 }
 
 func main() {
@@ -50,6 +52,6 @@ func main() {
 		logger.Fatalw("Service exited with error", "error", err)
 	}
 
-	_ = r.Stop()
+	r.Stop()
 	logger.Infow("Service stopped")
 }
