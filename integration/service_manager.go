@@ -7,36 +7,36 @@ import (
 	"time"
 
 	"integration-suricata-ndpi/pkg/logger"
-
-	"go.uber.org/zap"
 )
-
-// EnsureSuricataRunning проверяет, что Suricata доступна через управляющий unix-сокет.
 
 func EnsureSuricataRunning(socketCandidates []string) error {
 	socketPath, err := FirstExistingPath(socketCandidates)
 	if err != nil {
-		return fmt.Errorf("suricata недоступна: управляющий сокет не найден: %w", err)
+		return fmt.Errorf("suricata is unavailable: control socket not found: %w", err)
 	}
 
-	logger.Log.Info("Проверка доступности Suricata", zap.String("socket_path", socketPath))
+	logger.Infow("Checking Suricata availability",
+		"socket_path", socketPath,
+	)
 
 	info, err := os.Stat(socketPath)
 	if err != nil {
-		return fmt.Errorf("не удалось проверить сокет suricata (%s): %w", socketPath, err)
+		return fmt.Errorf("failed to stat suricata socket (%s): %w", socketPath, err)
 	}
 
 	if (info.Mode() & os.ModeSocket) == 0 {
-		return fmt.Errorf("путь существует, но это не unix-сокет: %s", socketPath)
+		return fmt.Errorf("path exists but is not a unix socket: %s", socketPath)
 	}
 
 	const probeTimeout = 2 * time.Second
 	conn, err := net.DialTimeout("unix", socketPath, probeTimeout)
 	if err != nil {
-		return fmt.Errorf("suricata сокет есть, но подключиться нельзя (%s): %w", socketPath, err)
+		return fmt.Errorf("suricata socket exists but dial failed (%s): %w", socketPath, err)
 	}
 	_ = conn.Close()
 
-	logger.Log.Info("Suricata доступна по сокету", zap.String("socket_path", socketPath))
+	logger.Infow("Suricata is reachable via socket",
+		"socket_path", socketPath,
+	)
 	return nil
 }

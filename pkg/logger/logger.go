@@ -6,22 +6,47 @@ import (
 	"go.uber.org/zap"
 )
 
+type Options struct {
+	Level string
+
+	Development bool
+}
+
 var (
-	Log  *zap.Logger = zap.NewNop()
 	once sync.Once
+	log  *zap.SugaredLogger = zap.NewNop().Sugar()
 )
 
 func Init() {
+	InitWithOptions(Options{})
+}
+
+func InitWithOptions(opts Options) {
 	once.Do(func() {
-		l, err := zap.NewProduction()
+		var cfg zap.Config
+		if opts.Development {
+			cfg = zap.NewDevelopmentConfig()
+		} else {
+			cfg = zap.NewProductionConfig()
+		}
+
+		if opts.Level != "" {
+			_ = cfg.Level.UnmarshalText([]byte(opts.Level))
+		}
+
+		l, err := cfg.Build()
 		if err != nil {
-			Log = zap.NewNop()
+			log = zap.NewNop().Sugar()
 			return
 		}
-		Log = l
+		log = l.Sugar()
 	})
 }
 
-func Sync() {
-	_ = Log.Sync()
-}
+func Sync() { _ = log.Sync() }
+
+func Debugw(msg string, keysAndValues ...any) { log.Debugw(msg, keysAndValues...) }
+func Infow(msg string, keysAndValues ...any)  { log.Infow(msg, keysAndValues...) }
+func Warnw(msg string, keysAndValues ...any)  { log.Warnw(msg, keysAndValues...) }
+func Errorw(msg string, keysAndValues ...any) { log.Errorw(msg, keysAndValues...) }
+func Fatalw(msg string, keysAndValues ...any) { log.Fatalw(msg, keysAndValues...) }

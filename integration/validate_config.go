@@ -6,49 +6,46 @@ import (
 	"path/filepath"
 
 	"integration-suricata-ndpi/pkg/logger"
-
-	"go.uber.org/zap"
 )
 
 func ValidateLocalResources(ndpiRulesDir string, templatePath string) error {
-	logger.Log.Info("Валидация локальных ресурсов",
-		zap.String("ndpi_rules_dir", ndpiRulesDir),
-		zap.String("template_path", templatePath),
+	logger.Infow("Validating local resources",
+		"ndpi_rules_dir", ndpiRulesDir,
+		"template_path", templatePath,
 	)
 
-	// 1) Папка правил nDPI
 	info, err := os.Stat(ndpiRulesDir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return fmt.Errorf("не найдена папка правил nDPI: %s", ndpiRulesDir)
+			return fmt.Errorf("nDPI rules directory not found: %s", ndpiRulesDir)
 		}
-		return fmt.Errorf("ошибка доступа к папке правил nDPI (%s): %w", ndpiRulesDir, err)
+		return fmt.Errorf("cannot access nDPI rules directory (%s): %w", ndpiRulesDir, err)
 	}
 	if !info.IsDir() {
-		return fmt.Errorf("путь правил nDPI не является директорией: %s", ndpiRulesDir)
+		return fmt.Errorf("nDPI rules path is not a directory: %s", ndpiRulesDir)
 	}
 
-	// Не фатально, но полезно предупредить
 	files, err := filepath.Glob(filepath.Join(ndpiRulesDir, "*"))
 	if err != nil {
-		return fmt.Errorf("не удалось прочитать файлы в папке правил (%s): %w", ndpiRulesDir, err)
+		return fmt.Errorf("failed to list files in rules directory (%s): %w", ndpiRulesDir, err)
 	}
 	if len(files) == 0 {
-		logger.Log.Warn("Папка правил nDPI пустая", zap.String("path", ndpiRulesDir))
+		logger.Warnw("nDPI rules directory is empty",
+			"path", ndpiRulesDir,
+		)
 	}
 
-	// 2) Шаблон Suricata
 	tmplInfo, err := os.Stat(templatePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return fmt.Errorf("не найден шаблон конфигурации: %s", templatePath)
+			return fmt.Errorf("suricata template not found: %s", templatePath)
 		}
-		return fmt.Errorf("ошибка доступа к шаблону (%s): %w", templatePath, err)
+		return fmt.Errorf("cannot access template (%s): %w", templatePath, err)
 	}
 	if tmplInfo.IsDir() {
-		return fmt.Errorf("шаблон конфигурации не должен быть директорией: %s", templatePath)
+		return fmt.Errorf("suricata template must be a file, got a directory: %s", templatePath)
 	}
 
-	logger.Log.Info("Локальные ресурсы валидны")
+	logger.Infow("Local resources are valid")
 	return nil
 }

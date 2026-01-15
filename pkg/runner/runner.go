@@ -7,27 +7,26 @@ import (
 	"integration-suricata-ndpi/integration"
 	"integration-suricata-ndpi/internal/config"
 	"integration-suricata-ndpi/pkg/logger"
-
-	"go.uber.org/zap"
 )
 
 type Runner struct{}
 
 func NewRunner() *Runner { return &Runner{} }
 
-func (r *Runner) Start(ctx context.Context, configPath string) error {
-	logger.Log.Info("Старт процесса интеграции")
+func (r *Runner) Run(ctx context.Context, configPath string) error {
+	logger.Infow("Starting integration workflow")
 
 	cfg, err := config.Load(configPath)
 	if err != nil {
-		return fmt.Errorf("не удалось загрузить config.yaml: %w", err)
+		return fmt.Errorf("failed to load config: %w", err)
 	}
 
 	if err := r.checkContext(ctx); err != nil {
 		return err
 	}
+
 	if err := integration.ValidateLocalResources(cfg.Paths.NDPIRulesLocal, cfg.Paths.SuricataTemplate); err != nil {
-		return fmt.Errorf("шаг 1 (валидация локальных ресурсов) не пройден: %w", err)
+		return fmt.Errorf("step 1 (validate local resources) failed: %w", err)
 	}
 
 	if err := r.checkContext(ctx); err != nil {
@@ -43,7 +42,7 @@ func (r *Runner) Start(ctx context.Context, configPath string) error {
 		ReloadTimeout:        cfg.Reload.Timeout,
 		ExpectedRulesPattern: cfg.NDPI.ExpectedRulesPattern,
 	}); err != nil {
-		return fmt.Errorf("шаг 2 (валидация конфигурации nDPI) не пройден: %w", err)
+		return fmt.Errorf("step 2 (validate nDPI config) failed: %w", err)
 	}
 
 	if err := r.checkContext(ctx); err != nil {
@@ -51,7 +50,7 @@ func (r *Runner) Start(ctx context.Context, configPath string) error {
 	}
 
 	if err := integration.EnsureSuricataRunning(cfg.Suricata.SocketCandidates); err != nil {
-		return fmt.Errorf("шаг 3 (suricata socket) не пройден: %w", err)
+		return fmt.Errorf("step 3 (check Suricata socket) failed: %w", err)
 	}
 
 	if err := r.checkContext(ctx); err != nil {
@@ -66,29 +65,28 @@ func (r *Runner) Start(ctx context.Context, configPath string) error {
 		ReloadCommand:    cfg.Reload.Command,
 		ReloadTimeout:    cfg.Reload.Timeout,
 	})
-
 	if err != nil {
-		return fmt.Errorf("шаг 4 (apply config) не пройден: %w", err)
+		return fmt.Errorf("step 4 (apply config) failed: %w", err)
 	}
 
 	if report.ReloadStatus != integration.ReloadOK {
-		logger.Log.Warn("Конфиг записан, но reload/reconfigure не подтверждён (best-effort)",
-			zap.String("status", string(report.ReloadStatus)),
-			zap.String("config_path", report.TargetConfigPath),
-			zap.String("command", report.ReloadCommand),
-			zap.Duration("timeout", report.ReloadTimeout),
-			zap.Strings("warnings", report.Warnings),
-			zap.String("output", report.ReloadOutput),
+		logger.Warnw("Config written, but reload/reconfigure was not confirmed (best-effort)",
+			"status", string(report.ReloadStatus),
+			"config_path", report.TargetConfigPath,
+			"command", report.ReloadCommand,
+			"timeout", report.ReloadTimeout,
+			"warnings", report.Warnings,
+			"output", report.ReloadOutput,
 		)
 	} else {
-		logger.Log.Info("Конфиг записан и reload/reconfigure успешен",
-			zap.String("config_path", report.TargetConfigPath),
-			zap.String("command", report.ReloadCommand),
-			zap.String("output", report.ReloadOutput),
+		logger.Infow("Config written and reload/reconfigure succeeded",
+			"config_path", report.TargetConfigPath,
+			"command", report.ReloadCommand,
+			"output", report.ReloadOutput,
 		)
 	}
 
-	logger.Log.Info("Интеграция запущена, ожидание сигнала остановки")
+	logger.Infow("Integration workflow completed; waiting for shutdown signal")
 	<-ctx.Done()
 
 	r.Stop()
@@ -96,12 +94,12 @@ func (r *Runner) Start(ctx context.Context, configPath string) error {
 }
 
 func (r *Runner) Stop() {
-	logger.Log.Info("Остановка процесса интеграции: ресурсов для освобождения нет")
+	logger.Infow("Stopping integration workflow (no resources to release)")
 }
 
 func (r *Runner) checkContext(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
-		logger.Log.Warn("Запуск прерван: контекст отменён")
+		logger.Warnw("Startup aborted: context canceled", "error", err)
 		return err
 	}
 	return nil
