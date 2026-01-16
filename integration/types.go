@@ -40,6 +40,12 @@ type NDPIValidateOptions struct {
 	ExpectedRulesPattern string
 }
 
+type NDPIToggleOptions struct {
+	TemplatePath   string
+	NDPIPluginPath string
+	Enable         bool
+}
+
 type ReloadStatus string
 
 const (
