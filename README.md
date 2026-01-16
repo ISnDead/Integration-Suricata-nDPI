@@ -28,12 +28,12 @@
   - The Suricata template is stored in config/suricata.yaml.tpl.
 
 ### Minimally important fields:
-  - paths.ndpi_rules_local — local nDPI rules directory
-  - paths.suricata_template — suricata.yaml.tpl template
-  - paths.suricatasc — path to suricatasc
-  - suricata.socket_candidates — unix-socket path candidates
-  - suricata.config_candidates — suricata.yaml path candidates
-  - reload.command, reload.timeout — best-effort reload/reconfigure parameters
+  - paths.ndpi_rules_local - local nDPI rules directory
+  - paths.suricata_template - suricata.yaml.tpl template
+  - paths.suricatasc - path to suricatasc
+  - suricata.socket_candidates - unix-socket path candidates
+  - suricata.config_candidates - suricata.yaml path candidates
+  - reload.command, reload.timeout - best-effort reload/reconfigure parameters
 
 ## nDPI plugin enable/disable (Host Agent)
 
