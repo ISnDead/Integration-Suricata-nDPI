@@ -53,10 +53,10 @@ In typical deployments, the integration service runs in a container, while Suric
 
 The Host Agent exposes a small HTTP API over a Unix socket:
 
-  - GET /health — liveness probe
-  - GET /ndpi/status — returns current desired state based on config contents
-  - POST /ndpi/enable — enables the nDPI plugin and restarts Suricata
-  - POST /ndpi/disable — disables the nDPI plugin and restarts Suricata
+  - GET /health - liveness probe
+  - GET /ndpi/status - returns current desired state based on config contents
+  - POST /ndpi/enable - enables the nDPI plugin and restarts Suricata
+  - POST /ndpi/disable - disables the nDPI plugin and restarts Suricata
 
 ### Example usage
 
