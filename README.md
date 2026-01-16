@@ -60,10 +60,10 @@ The Host Agent exposes a small HTTP API over a Unix socket:
 
 ### Example usage
 
-# Enable nDPI
+Enable nDPI
   - `sudo curl -X POST --unix-socket /run/ndpi-agent.sock http://localhost/ndpi/enable`
 
-# Disable nDPI
+Disable nDPI
   - `sudo curl -X POST --unix-socket /run/ndpi-agent.sock http://localhost/ndpi/disable`
 
 ### Operational notes
