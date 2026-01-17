@@ -35,6 +35,94 @@
   - suricata.config_candidates - suricata.yaml path candidates
   - reload.command, reload.timeout - best-effort reload/reconfigure parameters
 
+## Installing Suricata 8.0.x with nDPI 4.14 (Debian/Ubuntu)
+This project assumes:
+
+  - Suricata 8.0.x built with nDPI support (--enable-ndpi).
+  - nDPI 4.14 installed on the host.
+
+> Note: Package-manager installs (for example apt install suricata) may provide development or non‑nDPI builds. Prefer a stable source tarball and an explicit configure step.
+
+### 1. Install build dependencies
+```
+sudo apt-get update
+sudo apt-get install -y \
+  build-essential git \
+  autoconf automake libtool pkg-config gettext \
+  flex bison \
+  libpcap-dev libjson-c-dev libnuma-dev \
+  libpcre2-dev libmaxminddb-dev librrd-dev \
+  libyaml-dev libjansson-dev libmagic-dev \
+  rustc cargo
+```
+### 2. Build and install nDPI 4.14
+```
+mkdir -p ~/src && cd ~/src
+
+git clone https://github.com/ntop/nDPI.git
+cd nDPI
+
+# Checkout a tested release
+git checkout ndpi-4.14   # adjust to the exact tag you use
+
+./autogen.sh
+./configure --with-only-libndpi
+make -j"$(nproc)"
+sudo make install
+sudo ldconfig
+```
+This installs the nDPI library into the default system paths (for example /usr/local/lib, /usr/local/include).
+
+### 3. Download and build Suricata 8.0.2 with nDPI support
+```
+cd ~/src
+
+wget https://www.openinfosecfoundation.org/download/suricata-8.0.2.tar.gz
+tar xzf suricata-8.0.2.tar.gz
+cd suricata-8.0.2
+```
+Configure Suricata with nDPI enabled (adjust the nDPI path if you cloned it elsewhere):
+
+```
+./configure \
+  --enable-ndpi \
+  --with-ndpi=$HOME/src/nDPI \
+  --prefix=/usr \
+  --sysconfdir=/etc \
+  --localstatedir=/var
+```
+Build and install:
+
+```
+make -j"$(nproc)"
+sudo make install
+sudo ldconfig
+```
+After this step you should have:
+
+ - suricata installed under /usr/bin.
+ - Configuration directory under /etc/suricata.
+ - ndpi.so installed under /usr/lib/suricata or /usr/local/lib/suricata.
+
+### 4. Enable the nDPI plugin in Suricata configuration
+In your active Suricata configuration (or in the template used by this project), ensure the plugin section contains the nDPI shared object:
+```
+plugins:
+  - /usr/lib/suricata/ndpi.so
+```
+Adjust the path if ndpi.so is installed under /usr/local/lib/suricata instead.
+
+### 5. Basic verification
+```
+suricata --build-info
+
+ls -l /usr/lib/suricata/ndpi.so || \
+  ls -l /usr/local/lib/suricata/ndpi.so
+
+sudo suricata -c /etc/suricata/suricata.yaml -T
+```
+If the config test passes and ndpi.so is found, the Suricata + nDPI environment is ready to be managed by the integration service and Host Agent.
+
 ## nDPI plugin enable/disable (Host Agent)
 
 Because Suricata must be restarted to (un)load the nDPI plugin shared object (ndpi.so), the integration service does not perform plugin toggling directly. Instead, plugin enable/disable is delegated to a Host Agent running on the Suricata host.
