@@ -2,6 +2,7 @@ package hostagent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -34,7 +35,9 @@ func New(deps Deps) (*Server, error) {
 		deps.RestartTimeout = 20 * time.Second
 	}
 
-	_ = os.Remove(deps.SocketPath)
+	if err := removeIfSocket(deps.SocketPath); err != nil {
+		return nil, err
+	}
 
 	ln, err := net.Listen("unix", deps.SocketPath)
 	if err != nil {
@@ -98,7 +101,27 @@ func (s *Server) Stop() error {
 	if s.ln != nil {
 		_ = s.ln.Close()
 	}
-	_ = os.Remove(s.deps.SocketPath)
+
+	_ = removeIfSocket(s.deps.SocketPath)
 
 	return err
+}
+
+func removeIfSocket(path string) error {
+	info, err := os.Lstat(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return fmt.Errorf("stat socket path %s: %w", path, err)
+	}
+
+	if (info.Mode() & os.ModeSocket) == 0 {
+		return fmt.Errorf("refusing to remove non-socket path: %s", path)
+	}
+
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("remove socket %s: %w", path, err)
+	}
+	return nil
 }

@@ -3,6 +3,9 @@ package integration
 import (
 	"net"
 	"time"
+
+	"integration-suricata-ndpi/pkg/executil"
+	"integration-suricata-ndpi/pkg/fsutil"
 )
 
 type SuricataClient struct {
@@ -27,6 +30,9 @@ type ApplyConfigOptions struct {
 	SuricataSCPath string
 	ReloadCommand  string
 	ReloadTimeout  time.Duration
+
+	CommandRunner executil.Runner
+	FS            fsutil.FS
 }
 
 type NDPIValidateOptions struct {
@@ -38,6 +44,7 @@ type NDPIValidateOptions struct {
 	ReloadTimeout        time.Duration
 
 	ExpectedRulesPattern string
+	FS                   fsutil.FS
 }
 
 type NDPIToggleOptions struct {

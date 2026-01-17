@@ -5,17 +5,36 @@ import (
 	"fmt"
 
 	"integration-suricata-ndpi/internal/config"
+	"integration-suricata-ndpi/pkg/executil"
+	"integration-suricata-ndpi/pkg/fsutil"
 	"integration-suricata-ndpi/pkg/logger"
 )
 
-type Runner struct{}
+type Runner struct {
+	configPath    string
+	commandRunner executil.Runner
+	fs            fsutil.FS
+}
 
-func NewRunner() *Runner { return &Runner{} }
+func NewRunner(configPath string, commandRunner executil.Runner, fs fsutil.FS) *Runner {
+	if commandRunner == nil {
+		commandRunner = executil.DefaultRunner{}
+	}
+	if fs == nil {
+		fs = fsutil.OSFS{}
+	}
 
-func (r *Runner) Run(ctx context.Context, configPath string) error {
+	return &Runner{
+		configPath:    configPath,
+		commandRunner: commandRunner,
+		fs:            fs,
+	}
+}
+
+func (r *Runner) Start(ctx context.Context) error {
 	logger.Infow("Starting integration workflow")
 
-	cfg, err := config.Load(configPath)
+	cfg, err := config.Load(r.configPath)
 	if err != nil {
 		return fmt.Errorf("failed to load config.yaml: %w", err)
 	}
@@ -23,7 +42,7 @@ func (r *Runner) Run(ctx context.Context, configPath string) error {
 	if err := r.checkContext(ctx); err != nil {
 		return err
 	}
-	if err := ValidateLocalResources(cfg.Paths.NDPIRulesLocal, cfg.Paths.SuricataTemplate); err != nil {
+	if err := ValidateLocalResources(cfg.Paths.NDPIRulesLocal, cfg.Paths.SuricataTemplate, r.fs); err != nil {
 		return fmt.Errorf("step 1 (validate local resources) failed: %w", err)
 	}
 
@@ -38,6 +57,7 @@ func (r *Runner) Run(ctx context.Context, configPath string) error {
 		ReloadCommand:        cfg.Reload.Command,
 		ReloadTimeout:        cfg.Reload.Timeout,
 		ExpectedRulesPattern: cfg.NDPI.ExpectedRulesPattern,
+		FS:                   r.fs,
 	}); err != nil {
 		return fmt.Errorf("step 2 (validate ndpi config) failed: %w", err)
 	}
@@ -59,6 +79,8 @@ func (r *Runner) Run(ctx context.Context, configPath string) error {
 		SuricataSCPath:   cfg.Paths.SuricataSC,
 		ReloadCommand:    cfg.Reload.Command,
 		ReloadTimeout:    cfg.Reload.Timeout,
+		CommandRunner:    r.commandRunner,
+		FS:               r.fs,
 	})
 	if err != nil {
 		return fmt.Errorf("step 4 (apply config) failed: %w", err)
@@ -67,10 +89,10 @@ func (r *Runner) Run(ctx context.Context, configPath string) error {
 	logger.Infow("Waiting for shutdown signal")
 	<-ctx.Done()
 
-	return r.Stop()
+	return nil
 }
 
-func (r *Runner) Stop() error {
+func (r *Runner) Stop(ctx context.Context) error {
 	logger.Infow("Stopping integration workflow")
 	return nil
 }

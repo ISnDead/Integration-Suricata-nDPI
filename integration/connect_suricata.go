@@ -2,14 +2,25 @@ package integration
 
 import (
 	"fmt"
-	"net"
 	"time"
 
 	"integration-suricata-ndpi/pkg/logger"
+	"integration-suricata-ndpi/pkg/netutil"
 )
 
 func ConnectSuricata(socketCandidates []string, timeout time.Duration) (*SuricataClient, error) {
-	socketPath, err := FirstExistingPath(socketCandidates)
+	return ConnectSuricataWithDialer(socketCandidates, timeout, nil)
+}
+
+func ConnectSuricataWithDialer(socketCandidates []string, timeout time.Duration, dialer netutil.Dialer) (*SuricataClient, error) {
+	if dialer == nil {
+		dialer = netutil.DefaultDialer{}
+	}
+	if timeout <= 0 {
+		timeout = 5 * time.Second
+	}
+
+	socketPath, err := FirstDialableUnixSocket(socketCandidates, timeout, dialer)
 	if err != nil {
 		return nil, fmt.Errorf("suricata control socket not found: %w", err)
 	}
@@ -19,7 +30,7 @@ func ConnectSuricata(socketCandidates []string, timeout time.Duration) (*Suricat
 		"timeout", timeout,
 	)
 
-	conn, err := net.DialTimeout("unix", socketPath, timeout)
+	conn, err := dialer.DialTimeout("unix", socketPath, timeout)
 	if err != nil {
 		logger.Errorw("Failed to connect to unix socket",
 			"socket_path", socketPath,

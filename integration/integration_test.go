@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"integration-suricata-ndpi/pkg/fsutil"
 )
 
 func writeExecutable(t *testing.T, dir, name, body string) string {
@@ -192,7 +194,7 @@ func TestApplyConfig_EmptyCommand_SafeNoReload(t *testing.T) {
 	if rep.ReloadStatus != ReloadOK {
 		t.Fatalf("want ReloadOK, got %s", rep.ReloadStatus)
 	}
-	if len(rep.Warnings) == 0 || !strings.Contains(rep.Warnings[0], "reload_command пустой") {
+	if len(rep.Warnings) == 0 || !strings.Contains(rep.Warnings[0], "reload_command empty/none") {
 		t.Fatalf("expected warning about empty command, got %+v", rep.Warnings)
 	}
 }
@@ -201,7 +203,7 @@ func TestWriteFileAtomic_DirMissing_Error(t *testing.T) {
 	dir := t.TempDir()
 	target := filepath.Join(dir, "no_such_dir", "x.txt")
 
-	err := writeFileAtomic(target, []byte("data"), 0o644)
+	err := writeFileAtomic(target, []byte("data"), 0o644, fsutil.OSFS{})
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -211,7 +213,7 @@ func TestWriteFileAtomic_PermApplied(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "a.txt")
 
-	if err := writeFileAtomic(p, []byte("new"), 0o600); err != nil {
+	if err := writeFileAtomic(p, []byte("new"), 0o600, fsutil.OSFS{}); err != nil {
 		t.Fatalf("unexpected: %v", err)
 	}
 
@@ -231,7 +233,7 @@ func TestWriteFileAtomic_OverwriteExisting_OK(t *testing.T) {
 	if err := os.WriteFile(p, []byte("old"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := writeFileAtomic(p, []byte("new"), 0o644); err != nil {
+	if err := writeFileAtomic(p, []byte("new"), 0o644, fsutil.OSFS{}); err != nil {
 		t.Fatalf("unexpected: %v", err)
 	}
 	b, _ := os.ReadFile(p)
@@ -247,7 +249,7 @@ func TestWriteFileAtomic_WritesNewContent(t *testing.T) {
 	if err := os.WriteFile(p, []byte("old"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := writeFileAtomic(p, []byte("new"), 0o600); err != nil {
+	if err := writeFileAtomic(p, []byte("new"), 0o600, fsutil.OSFS{}); err != nil {
 		t.Fatal(err)
 	}
 	b, _ := os.ReadFile(p)
@@ -264,7 +266,7 @@ func TestWriteFileAtomic_RenameToDir_Error(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := writeFileAtomic(target, []byte("data"), 0o644)
+	err := writeFileAtomic(target, []byte("data"), 0o644, fsutil.OSFS{})
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -276,28 +278,28 @@ func TestMustBeFile_OK(t *testing.T) {
 	if err := os.WriteFile(p, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := mustBeFile(p, "file"); err != nil {
+	if err := mustBeFile(p, "file", fsutil.OSFS{}); err != nil {
 		t.Fatalf("unexpected: %v", err)
 	}
 }
 
 func TestMustBeFile_WhenDir_Error(t *testing.T) {
 	dir := t.TempDir()
-	if err := mustBeFile(dir, "file"); err == nil {
+	if err := mustBeFile(dir, "file", fsutil.OSFS{}); err == nil {
 		t.Fatal("expected error")
 	}
 }
 
 func TestMustBeFile_Missing_Error(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "nope.txt")
-	if err := mustBeFile(p, "file"); err == nil {
+	if err := mustBeFile(p, "file", fsutil.OSFS{}); err == nil {
 		t.Fatal("expected error")
 	}
 }
 
 func TestMustBeDir_OK(t *testing.T) {
 	dir := t.TempDir()
-	if err := mustBeDir(dir, "dir"); err != nil {
+	if err := mustBeDir(dir, "dir", fsutil.OSFS{}); err != nil {
 		t.Fatalf("unexpected: %v", err)
 	}
 }
@@ -308,14 +310,14 @@ func TestMustBeDir_WhenFile_Error(t *testing.T) {
 	if err := os.WriteFile(p, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := mustBeDir(p, "dir"); err == nil {
+	if err := mustBeDir(p, "dir", fsutil.OSFS{}); err == nil {
 		t.Fatal("expected error")
 	}
 }
 
 func TestMustBeDir_Missing_Error(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "nope-dir")
-	if err := mustBeDir(p, "dir"); err == nil {
+	if err := mustBeDir(p, "dir", fsutil.OSFS{}); err == nil {
 		t.Fatal("expected error")
 	}
 }
@@ -651,7 +653,7 @@ func TestValidateLocalResources_OK(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := ValidateLocalResources(ndpiDir, tpl); err != nil {
+	if err := ValidateLocalResources(ndpiDir, tpl, fsutil.OSFS{}); err != nil {
 		t.Fatalf("unexpected: %v", err)
 	}
 }
@@ -661,10 +663,10 @@ func TestValidateLocalResources_Missing(t *testing.T) {
 	tpl := filepath.Join(dir, "x.tpl")
 	_ = os.WriteFile(tpl, []byte("x"), 0o644)
 
-	if err := ValidateLocalResources(filepath.Join(dir, "nope"), tpl); err == nil {
+	if err := ValidateLocalResources(filepath.Join(dir, "nope"), tpl, fsutil.OSFS{}); err == nil {
 		t.Fatal("expected error for missing ndpi dir")
 	}
-	if err := ValidateLocalResources(dir, filepath.Join(dir, "nope.tpl")); err == nil {
+	if err := ValidateLocalResources(dir, filepath.Join(dir, "nope.tpl"), fsutil.OSFS{}); err == nil {
 		t.Fatal("expected error for missing template")
 	}
 }
@@ -678,7 +680,7 @@ func TestValidateLocalResources_TemplateIsDir_Error(t *testing.T) {
 	tplDir := filepath.Join(dir, "tpldir")
 	_ = os.MkdirAll(tplDir, 0o755)
 
-	if err := ValidateLocalResources(ndpiDir, tplDir); err == nil {
+	if err := ValidateLocalResources(ndpiDir, tplDir, fsutil.OSFS{}); err == nil {
 		t.Fatal("expected error")
 	}
 }
