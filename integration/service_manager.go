@@ -2,14 +2,22 @@ package integration
 
 import (
 	"fmt"
-	"net"
 	"os"
 	"time"
 
 	"integration-suricata-ndpi/pkg/logger"
+	"integration-suricata-ndpi/pkg/netutil"
 )
 
 func EnsureSuricataRunning(socketCandidates []string) error {
+	return EnsureSuricataRunningWithDialer(socketCandidates, nil)
+}
+
+func EnsureSuricataRunningWithDialer(socketCandidates []string, dialer netutil.Dialer) error {
+	if dialer == nil {
+		dialer = netutil.DefaultDialer{}
+	}
+
 	socketPath, err := FirstExistingPath(socketCandidates)
 	if err != nil {
 		return fmt.Errorf("suricata is unavailable: control socket not found: %w", err)
@@ -29,7 +37,7 @@ func EnsureSuricataRunning(socketCandidates []string) error {
 	}
 
 	const probeTimeout = 2 * time.Second
-	conn, err := net.DialTimeout("unix", socketPath, probeTimeout)
+	conn, err := dialer.DialTimeout("unix", socketPath, probeTimeout)
 	if err != nil {
 		return fmt.Errorf("suricata socket exists but dial failed (%s): %w", socketPath, err)
 	}

@@ -1,6 +1,15 @@
 package hostagent
 
-import "time"
+import (
+	"context"
+	"time"
+
+	"integration-suricata-ndpi/pkg/fsutil"
+)
+
+type SystemdManager interface {
+	Restart(ctx context.Context, unit string, timeout time.Duration) error
+}
 
 type Deps struct {
 	SocketPath      string
@@ -9,4 +18,7 @@ type Deps struct {
 	SuricataUnit    string
 
 	RestartTimeout time.Duration
+	SystemctlPath  string
+	Systemd        SystemdManager
+	FS             fsutil.FS
 }

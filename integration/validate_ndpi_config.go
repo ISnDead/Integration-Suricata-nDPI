@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"integration-suricata-ndpi/pkg/fsutil"
 	"integration-suricata-ndpi/pkg/logger"
 )
 
@@ -18,6 +19,11 @@ func ValidateNDPIConfig(opts NDPIValidateOptions) error {
 	reloadCommand := opts.ReloadCommand
 	reloadTimeout := opts.ReloadTimeout
 	expectedNdpiRulesPattern := opts.ExpectedRulesPattern
+	fs := opts.FS
+
+	if fs == nil {
+		fs = fsutil.OSFS{}
+	}
 
 	logger.Infow("Validating nDPI configuration",
 		"ndpi_plugin_path", ndpiPluginPath,
@@ -29,22 +35,22 @@ func ValidateNDPIConfig(opts NDPIValidateOptions) error {
 		"expected_ndpi_rules_pattern", expectedNdpiRulesPattern,
 	)
 
-	if err := mustBeFile(ndpiPluginPath, "nDPI plugin (ndpi.so)"); err != nil {
+	if err := mustBeFile(ndpiPluginPath, "nDPI plugin (ndpi.so)", fs); err != nil {
 		return err
 	}
 
-	if err := mustBeDir(ndpiRulesDir, "nDPI rules directory"); err != nil {
+	if err := mustBeDir(ndpiRulesDir, "nDPI rules directory", fs); err != nil {
 		return err
 	}
 
-	ruleFiles, _ := filepath.Glob(filepath.Join(ndpiRulesDir, "*.rules"))
+	ruleFiles, _ := fs.Glob(filepath.Join(ndpiRulesDir, "*.rules"))
 	if len(ruleFiles) == 0 {
 		logger.Warnw("No *.rules files found in nDPI rules directory (not fatal)",
 			"path", ndpiRulesDir,
 		)
 	}
 
-	tpl, err := os.ReadFile(suricataTemplatePath)
+	tpl, err := fs.ReadFile(suricataTemplatePath)
 	if err != nil {
 		return fmt.Errorf("failed to read Suricata template (%s): %w", suricataTemplatePath, err)
 	}
@@ -67,7 +73,7 @@ func ValidateNDPIConfig(opts NDPIValidateOptions) error {
 		)
 	}
 
-	if err := mustBeFile(suricatascPath, "suricatasc"); err != nil {
+	if err := mustBeFile(suricatascPath, "suricatasc", fs); err != nil {
 		return err
 	}
 
@@ -89,8 +95,12 @@ func ValidateNDPIConfig(opts NDPIValidateOptions) error {
 	return nil
 }
 
-func mustBeFile(path string, what string) error {
-	info, err := os.Stat(path)
+func mustBeFile(path string, what string, fs fsutil.FS) error {
+	if fs == nil {
+		fs = fsutil.OSFS{}
+	}
+
+	info, err := fs.Stat(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return fmt.Errorf("%s not found: %s", what, path)
@@ -103,8 +113,12 @@ func mustBeFile(path string, what string) error {
 	return nil
 }
 
-func mustBeDir(path string, what string) error {
-	info, err := os.Stat(path)
+func mustBeDir(path string, what string, fs fsutil.FS) error {
+	if fs == nil {
+		fs = fsutil.OSFS{}
+	}
+
+	info, err := fs.Stat(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return fmt.Errorf("%s not found: %s", what, path)

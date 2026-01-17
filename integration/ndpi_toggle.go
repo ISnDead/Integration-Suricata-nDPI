@@ -7,10 +7,16 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"integration-suricata-ndpi/pkg/fsutil"
 )
 
 func NDPIStatus(suricataCfgPath, ndpiPluginPath string) (bool, string, error) {
-	lines, err := readLines(suricataCfgPath)
+	return NDPIStatusWithFS(suricataCfgPath, ndpiPluginPath, nil)
+}
+
+func NDPIStatusWithFS(suricataCfgPath, ndpiPluginPath string, fs fsutil.FS) (bool, string, error) {
+	lines, err := readLines(suricataCfgPath, fs)
 	if err != nil {
 		return false, "", err
 	}
@@ -25,7 +31,11 @@ func NDPIStatus(suricataCfgPath, ndpiPluginPath string) (bool, string, error) {
 }
 
 func SetNDPIEnabled(suricataCfgPath, ndpiPluginPath string, enable bool) (bool, bool, error) {
-	lines, err := readLines(suricataCfgPath)
+	return SetNDPIEnabledWithFS(suricataCfgPath, ndpiPluginPath, enable, nil)
+}
+
+func SetNDPIEnabledWithFS(suricataCfgPath, ndpiPluginPath string, enable bool, fs fsutil.FS) (bool, bool, error) {
+	lines, err := readLines(suricataCfgPath, fs)
 	if err != nil {
 		return false, false, err
 	}
@@ -70,7 +80,11 @@ func SetNDPIEnabled(suricataCfgPath, ndpiPluginPath string, enable bool) (bool, 
 	}
 
 	perm := os.FileMode(0o644)
-	if st, statErr := os.Stat(suricataCfgPath); statErr == nil {
+	if fs == nil {
+		fs = fsutil.OSFS{}
+	}
+
+	if st, statErr := fs.Stat(suricataCfgPath); statErr == nil {
 		perm = st.Mode().Perm()
 	}
 
@@ -79,15 +93,19 @@ func SetNDPIEnabled(suricataCfgPath, ndpiPluginPath string, enable bool) (bool, 
 		out += "\n"
 	}
 
-	if err := writeFileAtomic(suricataCfgPath, []byte(out), perm); err != nil {
+	if err := writeFileAtomic(suricataCfgPath, []byte(out), perm, fs); err != nil {
 		return false, false, fmt.Errorf("failed to write suricata config: %w", err)
 	}
 
 	return true, enabledAfter, nil
 }
 
-func readLines(path string) ([]string, error) {
-	b, err := os.ReadFile(path)
+func readLines(path string, fs fsutil.FS) ([]string, error) {
+	if fs == nil {
+		fs = fsutil.OSFS{}
+	}
+
+	b, err := fs.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", path, err)
 	}

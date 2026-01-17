@@ -5,16 +5,21 @@ import (
 	"os"
 	"path/filepath"
 
+	"integration-suricata-ndpi/pkg/fsutil"
 	"integration-suricata-ndpi/pkg/logger"
 )
 
-func ValidateLocalResources(ndpiRulesDir string, templatePath string) error {
+func ValidateLocalResources(ndpiRulesDir string, templatePath string, fs fsutil.FS) error {
+	if fs == nil {
+		fs = fsutil.OSFS{}
+	}
+
 	logger.Infow("Validating local resources",
 		"ndpi_rules_dir", ndpiRulesDir,
 		"template_path", templatePath,
 	)
 
-	info, err := os.Stat(ndpiRulesDir)
+	info, err := fs.Stat(ndpiRulesDir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return fmt.Errorf("nDPI rules directory not found: %s", ndpiRulesDir)
@@ -25,7 +30,7 @@ func ValidateLocalResources(ndpiRulesDir string, templatePath string) error {
 		return fmt.Errorf("nDPI rules path is not a directory: %s", ndpiRulesDir)
 	}
 
-	files, err := filepath.Glob(filepath.Join(ndpiRulesDir, "*"))
+	files, err := fs.Glob(filepath.Join(ndpiRulesDir, "*"))
 	if err != nil {
 		return fmt.Errorf("failed to list files in rules directory (%s): %w", ndpiRulesDir, err)
 	}
@@ -35,7 +40,7 @@ func ValidateLocalResources(ndpiRulesDir string, templatePath string) error {
 		)
 	}
 
-	tmplInfo, err := os.Stat(templatePath)
+	tmplInfo, err := fs.Stat(templatePath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return fmt.Errorf("suricata template not found: %s", templatePath)

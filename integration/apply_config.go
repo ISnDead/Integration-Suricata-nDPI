@@ -5,9 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 
+	"integration-suricata-ndpi/pkg/executil"
+	"integration-suricata-ndpi/pkg/fsutil"
 	"integration-suricata-ndpi/pkg/logger"
 )
 
@@ -18,6 +19,12 @@ func ApplyConfig(opts ApplyConfigOptions) (ApplyConfigReport, error) {
 	suricatascPath := opts.SuricataSCPath
 	reloadCommand := opts.ReloadCommand
 	reloadTimeout := opts.ReloadTimeout
+	commandRunner := opts.CommandRunner
+	fs := opts.FS
+
+	if fs == nil {
+		fs = fsutil.OSFS{}
+	}
 
 	report := ApplyConfigReport{
 		ReloadCommand: reloadCommand,
@@ -46,7 +53,7 @@ func ApplyConfig(opts ApplyConfigOptions) (ApplyConfigReport, error) {
 		return report, nil
 	}
 
-	tmplData, err := os.ReadFile(templatePath)
+	tmplData, err := fs.ReadFile(templatePath)
 	if err != nil {
 		return report, fmt.Errorf("failed to read template %s: %w", templatePath, err)
 	}
@@ -57,7 +64,12 @@ func ApplyConfig(opts ApplyConfigOptions) (ApplyConfigReport, error) {
 	}
 	report.TargetConfigPath = targetConfigPath
 
-	if err := writeFileAtomic(targetConfigPath, tmplData, 0o644); err != nil {
+	perm := os.FileMode(0o644)
+	if st, statErr := fs.Stat(targetConfigPath); statErr == nil {
+		perm = st.Mode().Perm()
+	}
+
+	if err := writeFileAtomic(targetConfigPath, tmplData, perm, fs); err != nil {
 		return report, fmt.Errorf("failed to write config %s: %w", targetConfigPath, err)
 	}
 	logger.Infow("Suricata config updated", "path", targetConfigPath)
@@ -71,8 +83,11 @@ func ApplyConfig(opts ApplyConfigOptions) (ApplyConfigReport, error) {
 	}
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, suricatascPath, "-c", reloadCommand)
-	out, err := cmd.CombinedOutput()
+	if commandRunner == nil {
+		commandRunner = executil.DefaultRunner{}
+	}
+
+	out, err := commandRunner.CombinedOutput(ctx, suricatascPath, "-c", reloadCommand)
 	report.ReloadOutput = strings.TrimSpace(string(out))
 
 	// suricatasc timeout

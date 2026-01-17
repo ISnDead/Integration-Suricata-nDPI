@@ -3,10 +3,20 @@ package integration
 import (
 	"fmt"
 	"os"
+
+	"integration-suricata-ndpi/pkg/fsutil"
 )
 
 func WriteSuricataConfigFromTemplate(templatePath string, configCandidates []string) (targetPath string, err error) {
-	tpl, err := os.ReadFile(templatePath)
+	return WriteSuricataConfigFromTemplateWithFS(templatePath, configCandidates, nil)
+}
+
+func WriteSuricataConfigFromTemplateWithFS(templatePath string, configCandidates []string, fs fsutil.FS) (targetPath string, err error) {
+	if fs == nil {
+		fs = fsutil.OSFS{}
+	}
+
+	tpl, err := fs.ReadFile(templatePath)
 	if err != nil {
 		return "", fmt.Errorf("read template: %w", err)
 	}
@@ -17,11 +27,11 @@ func WriteSuricataConfigFromTemplate(templatePath string, configCandidates []str
 	}
 
 	mode := os.FileMode(0o644)
-	if st, statErr := os.Stat(targetPath); statErr == nil {
+	if st, statErr := fs.Stat(targetPath); statErr == nil {
 		mode = st.Mode().Perm()
 	}
 
-	if err := writeFileAtomic(targetPath, tpl, mode); err != nil {
+	if err := writeFileAtomic(targetPath, tpl, mode, fs); err != nil {
 		return "", fmt.Errorf("write config atomically: %w", err)
 	}
 

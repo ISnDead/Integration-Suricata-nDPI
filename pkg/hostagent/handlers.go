@@ -37,7 +37,7 @@ func (h *Handlers) NDPIStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	enabled, line, err := integration.NDPIStatus(h.deps.SuricataCfgPath, h.deps.NDPIPluginPath)
+	enabled, line, err := integration.NDPIStatusWithFS(h.deps.SuricataCfgPath, h.deps.NDPIPluginPath, h.deps.FS)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -52,14 +52,14 @@ func (h *Handlers) NDPIEnable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	changed, enabledAfter, err := integration.SetNDPIEnabled(h.deps.SuricataCfgPath, h.deps.NDPIPluginPath, true)
+	changed, enabledAfter, err := integration.SetNDPIEnabledWithFS(h.deps.SuricataCfgPath, h.deps.NDPIPluginPath, true, h.deps.FS)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	if changed {
-		if err := RestartUnit(r.Context(), h.deps.SuricataUnit, h.deps.RestartTimeout); err != nil {
+		if err := h.deps.Systemd.Restart(r.Context(), h.deps.SuricataUnit, h.deps.RestartTimeout); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -75,14 +75,14 @@ func (h *Handlers) NDPIDisable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	changed, enabledAfter, err := integration.SetNDPIEnabled(h.deps.SuricataCfgPath, h.deps.NDPIPluginPath, false)
+	changed, enabledAfter, err := integration.SetNDPIEnabledWithFS(h.deps.SuricataCfgPath, h.deps.NDPIPluginPath, false, h.deps.FS)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	if changed {
-		if err := RestartUnit(r.Context(), h.deps.SuricataUnit, h.deps.RestartTimeout); err != nil {
+		if err := h.deps.Systemd.Restart(r.Context(), h.deps.SuricataUnit, h.deps.RestartTimeout); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
