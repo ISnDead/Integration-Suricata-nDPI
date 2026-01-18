@@ -1,6 +1,15 @@
 package hostagent
 
-import "time"
+import (
+	"context"
+	"time"
+
+	"integration-suricata-ndpi/pkg/fsutil"
+)
+
+type SystemdManager interface {
+	Restart(ctx context.Context, unit string, timeout time.Duration) error
+}
 
 type Deps struct {
 	SocketPath      string
@@ -9,21 +18,7 @@ type Deps struct {
 	SuricataUnit    string
 
 	RestartTimeout time.Duration
-}
-
-type baseResp struct {
-	OK      bool   `json:"ok"`
-	Message string `json:"message,omitempty"`
-}
-
-type ndpiStatusResp struct {
-	baseResp
-	Enabled bool   `json:"enabled"`
-	Line    string `json:"line,omitempty"`
-}
-
-type ndpiToggleResp struct {
-	baseResp
-	Changed bool `json:"changed"`
-	Enabled bool `json:"enabled"`
+	SystemctlPath  string
+	Systemd        SystemdManager
+	FS             fsutil.FS
 }

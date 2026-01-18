@@ -16,11 +16,8 @@ func ConnectSuricataWithDialer(socketCandidates []string, timeout time.Duration,
 	if dialer == nil {
 		dialer = netutil.DefaultDialer{}
 	}
-	if timeout <= 0 {
-		timeout = 5 * time.Second
-	}
 
-	socketPath, err := FirstDialableUnixSocket(socketCandidates, timeout, dialer)
+	socketPath, err := FirstExistingPath(socketCandidates)
 	if err != nil {
 		return nil, fmt.Errorf("suricata control socket not found: %w", err)
 	}
