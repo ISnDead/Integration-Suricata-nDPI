@@ -1,49 +1,54 @@
- Integration Suricata + nDPI automates configuration management for Suricata deployments that use the nDPI plugin.
+# Integration Suricata + nDPI
 
-### Key capabilities:
+Integration Suricata + nDPI automates configuration management for Suricata deployments that use the nDPI plugin.
 
-  - Generates suricata.yaml from a template and writes it atomically (safe update).
-  - Performs best-effort reload/reconfigure via suricatasc to apply rule/config changes that Suricata can reload without restarting.
-  - Validates local resources and nDPI-related paths (ndpi.so, rules directory, template, suricatasc).
-  - Checks Suricata availability via the unix control socket.
+## Key capabilities
 
-### Important note about nDPI plugin activation
+- Generates suricata.yaml from a template and writes it atomically (safe update).
+- Performs best-effort reload/reconfigure via suricatasc to apply rule/config changes that Suricata can reload without restarting.
+- Validates local resources and nDPI-related paths (ndpi.so, rules directory, template, suricatasc).
+- Checks Suricata availability via the unix control socket.
 
-  - nDPI plugin activation requires a Suricata process restart.
-  - This service does not attempt to restart Suricata. Instead, it focuses on safe configuration updates and reloadable changes (e.g., rules) without downtime.
+## Important note about nDPI plugin activation
 
+- nDPI plugin activation requires a Suricata process restart.
+- This service does not attempt to restart Suricata. Instead, it focuses on safe configuration updates and reloadable changes (e.g., rules) without downtime.
 
 ## Quick Start
 
 ### Build
-  - `go build -o bin/integration ./cmd/integration`
+
+- `go build -o bin/integration ./cmd/integration`
 
 ### Run
-  - `sudo ./bin/integration -config config/config.yaml`
 
+- `sudo ./bin/integration -config config/config.yaml`
 
 ### Configuration
 
-  - The configuration is defined by a YAML file (example: config/config.yaml).
-  - The Suricata template is stored in config/suricata.yaml.tpl.
+- The configuration is defined by a YAML file (example: config/config.yaml).
+- The Suricata template is stored in config/suricata.yaml.tpl.
 
-### Minimally important fields:
-  - paths.ndpi_rules_local - local nDPI rules directory
-  - paths.suricata_template - suricata.yaml.tpl template
-  - paths.suricatasc - path to suricatasc
-  - suricata.socket_candidates - unix-socket path candidates
-  - suricata.config_candidates - suricata.yaml path candidates
-  - reload.command, reload.timeout - best-effort reload/reconfigure parameters
+### Minimally important fields
+
+- paths.ndpi_rules_local - local nDPI rules directory
+- paths.suricata_template - suricata.yaml.tpl template
+- paths.suricatasc - path to suricatasc
+- suricata.socket_candidates - unix-socket path candidates
+- suricata.config_candidates - suricata.yaml path candidates
+- reload.command, reload.timeout - best-effort reload/reconfigure parameters
 
 ## Installing Suricata 8.0.x with nDPI 4.14 (Debian/Ubuntu)
+
 This project assumes:
 
-  - Suricata 8.0.x built with nDPI support (--enable-ndpi).
-  - nDPI 4.14 installed on the host.
+- Suricata 8.0.x built with nDPI support (--enable-ndpi).
+- nDPI 4.14 installed on the host.
 
 > Note: Package-manager installs (for example apt install suricata) may provide development or non‑nDPI builds. Prefer a stable source tarball and an explicit configure step.
 
 ### 1. Install build dependencies
+
 ```
 sudo apt-get update
 sudo apt-get install -y \
@@ -55,7 +60,9 @@ sudo apt-get install -y \
   libyaml-dev libjansson-dev libmagic-dev \
   rustc cargo
 ```
+
 ### 2. Build and install nDPI 4.14
+
 ```
 mkdir -p ~/src && cd ~/src
 
@@ -71,9 +78,11 @@ make -j"$(nproc)"
 sudo make install
 sudo ldconfig
 ```
+
 This installs the nDPI library into the default system paths (for example /usr/local/lib, /usr/local/include).
 
 ### 3. Download and build Suricata 8.0.2 with nDPI support
+
 ```
 cd ~/src
 
@@ -81,6 +90,7 @@ wget https://www.openinfosecfoundation.org/download/suricata-8.0.2.tar.gz
 tar xzf suricata-8.0.2.tar.gz
 cd suricata-8.0.2
 ```
+
 Configure Suricata with nDPI enabled (adjust the nDPI path if you cloned it elsewhere):
 
 ```
@@ -91,6 +101,7 @@ Configure Suricata with nDPI enabled (adjust the nDPI path if you cloned it else
   --sysconfdir=/etc \
   --localstatedir=/var
 ```
+
 Build and install:
 
 ```
@@ -98,21 +109,26 @@ make -j"$(nproc)"
 sudo make install
 sudo ldconfig
 ```
+
 After this step you should have:
 
- - suricata installed under /usr/bin.
- - Configuration directory under /etc/suricata.
- - ndpi.so installed under /usr/lib/suricata or /usr/local/lib/suricata.
+- suricata installed under /usr/bin.
+- Configuration directory under /etc/suricata.
+- ndpi.so installed under /usr/lib/suricata or /usr/local/lib/suricata.
 
 ### 4. Enable the nDPI plugin in Suricata configuration
+
 In your active Suricata configuration (or in the template used by this project), ensure the plugin section contains the nDPI shared object:
+
 ```
 plugins:
   - /usr/lib/suricata/ndpi.so
 ```
+
 Adjust the path if ndpi.so is installed under /usr/local/lib/suricata instead.
 
 ### 5. Basic verification
+
 ```
 suricata --build-info
 
@@ -121,6 +137,7 @@ ls -l /usr/lib/suricata/ndpi.so || \
 
 sudo suricata -c /etc/suricata/suricata.yaml -T
 ```
+
 If the config test passes and ndpi.so is found, the Suricata + nDPI environment is ready to be managed by the integration service and Host Agent.
 
 ## nDPI plugin enable/disable (Host Agent)
@@ -129,9 +146,9 @@ Because Suricata must be restarted to (un)load the nDPI plugin shared object (nd
 
 ### What the Host Agent does
 
-  - Modifies the active Suricata configuration (suricata.yaml) by commenting / uncommenting the ndpi.so plugin line within the plugins: section.
-  - Writes the updated configuration atomically to avoid partial writes and corrupted configs.
-  - Restarts Suricata via systemd to apply the change reliably.
+- Modifies the active Suricata configuration (suricata.yaml) by commenting / uncommenting the ndpi.so plugin line within the plugins: section.
+- Writes the updated configuration atomically to avoid partial writes and corrupted configs.
+- Restarts Suricata via systemd to apply the change reliably.
 
 ### Why a Host Agent is required
 
@@ -141,21 +158,24 @@ In typical deployments, the integration service runs in a container, while Suric
 
 The Host Agent exposes a small HTTP API over a Unix socket:
 
-  - GET /health - liveness probe
-  - GET /ndpi/status - returns current desired state based on config contents
-  - POST /ndpi/enable - enables the nDPI plugin and restarts Suricata
-  - POST /ndpi/disable - disables the nDPI plugin and restarts Suricata
+- GET /health - liveness probe
+- GET /ndpi/status - returns current desired state based on config contents
+- POST /ndpi/enable - enables the nDPI plugin and restarts Suricata
+- POST /ndpi/disable - disables the nDPI plugin and restarts Suricata
 
 ### Example usage
 
 Start host-agent:
-  - `sudo ./bin/host-agent serve --config config/config.yaml --sock /run/ndpi-agent.sock`
 
-Enable nDPI
-  - `sudo curl -X POST --unix-socket /run/ndpi-agent.sock http://localhost/ndpi/enable`
+- `sudo ./bin/host-agent serve --config config/config.yaml --sock /run/ndpi-agent.sock`
 
-Disable nDPI
-  - `sudo curl -X POST --unix-socket /run/ndpi-agent.sock http://localhost/ndpi/disable`
+Enable nDPI:
+
+- `sudo curl -X POST --unix-socket /run/ndpi-agent.sock http://localhost/ndpi/enable`
+
+Disable nDPI:
+
+- `sudo curl -X POST --unix-socket /run/ndpi-agent.sock http://localhost/ndpi/disable`
 
 ### Operational notes
 
