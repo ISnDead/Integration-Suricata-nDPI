@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"integration-suricata-ndpi/pkg/executil"
 	"integration-suricata-ndpi/pkg/fsutil"
@@ -25,6 +26,9 @@ func ApplyConfig(opts ApplyConfigOptions) (ApplyConfigReport, error) {
 	if fs == nil {
 		fs = fsutil.OSFS{}
 	}
+	if commandRunner == nil {
+		commandRunner = executil.DefaultRunner{}
+	}
 
 	report := ApplyConfigReport{
 		ReloadCommand: reloadCommand,
@@ -43,14 +47,6 @@ func ApplyConfig(opts ApplyConfigOptions) (ApplyConfigReport, error) {
 	cmdNormalized := strings.TrimSpace(strings.ToLower(reloadCommand))
 	if cmdNormalized == "shutdown" {
 		return report, fmt.Errorf("reload_command=shutdown is forbidden")
-	}
-	if cmdNormalized == "" || cmdNormalized == "none" {
-		report.ReloadStatus = ReloadOK
-		report.Warnings = append(report.Warnings, "reload_command empty/none: config written, reload skipped")
-		logger.Warnw("reload_command empty/none: reload skipped",
-			"reload_command", reloadCommand,
-		)
-		return report, nil
 	}
 
 	tmplData, err := fs.ReadFile(templatePath)
@@ -74,23 +70,26 @@ func ApplyConfig(opts ApplyConfigOptions) (ApplyConfigReport, error) {
 	}
 	logger.Infow("Suricata config updated", "path", targetConfigPath)
 
-	var ctx context.Context
-	var cancel func()
-	if reloadTimeout > 0 {
-		ctx, cancel = context.WithTimeout(context.Background(), reloadTimeout)
-	} else {
-		ctx, cancel = context.WithCancel(context.Background())
+	if cmdNormalized == "" || cmdNormalized == "none" {
+		report.ReloadStatus = ReloadOK
+		report.Warnings = append(report.Warnings, "reload_command empty/none: config written, reload skipped")
+		logger.Warnw("reload_command empty/none: reload skipped",
+			"reload_command", reloadCommand,
+		)
+		return report, nil
 	}
-	defer cancel()
 
-	if commandRunner == nil {
-		commandRunner = executil.DefaultRunner{}
+	if reloadTimeout <= 0 {
+		reloadTimeout = 10 * time.Second
+		report.ReloadTimeout = reloadTimeout
 	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), reloadTimeout)
+	defer cancel()
 
 	out, err := commandRunner.CombinedOutput(ctx, suricatascPath, "-c", reloadCommand)
 	report.ReloadOutput = strings.TrimSpace(string(out))
 
-	// suricatasc timeout
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		report.ReloadStatus = ReloadTimeout
 		report.Warnings = append(report.Warnings,
@@ -112,7 +111,6 @@ func ApplyConfig(opts ApplyConfigOptions) (ApplyConfigReport, error) {
 		return report, nil
 	}
 
-	// suricatasc error
 	if err != nil {
 		report.ReloadStatus = ReloadFailed
 		report.Warnings = append(report.Warnings,

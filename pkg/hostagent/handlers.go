@@ -1,6 +1,7 @@
 package hostagent
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
@@ -70,8 +71,12 @@ func (h *Handlers) NDPIEnable(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if changed {
-		if err := h.deps.Systemd.Restart(r.Context(), h.deps.SuricataUnit, h.deps.RestartTimeout); err != nil {
-			writeErr(w, http.StatusBadRequest, err.Error())
+		ctx, cancel := context.WithTimeout(context.Background(), h.deps.RestartTimeout)
+		defer cancel()
+
+		if err := h.deps.Systemd.Restart(ctx, h.deps.SuricataUnit, h.deps.RestartTimeout); err != nil {
+			logger.Errorw("systemd restart failed", "unit", h.deps.SuricataUnit, "error", err)
+			writeErr(w, http.StatusInternalServerError, "failed to restart suricata")
 			return
 		}
 	}
@@ -103,8 +108,12 @@ func (h *Handlers) NDPIDisable(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if changed {
-		if err := h.deps.Systemd.Restart(r.Context(), h.deps.SuricataUnit, h.deps.RestartTimeout); err != nil {
-			writeErr(w, http.StatusBadRequest, err.Error())
+		ctx, cancel := context.WithTimeout(context.Background(), h.deps.RestartTimeout)
+		defer cancel()
+
+		if err := h.deps.Systemd.Restart(ctx, h.deps.SuricataUnit, h.deps.RestartTimeout); err != nil {
+			logger.Errorw("systemd restart failed", "unit", h.deps.SuricataUnit, "error", err)
+			writeErr(w, http.StatusInternalServerError, "failed to restart suricata")
 			return
 		}
 	}

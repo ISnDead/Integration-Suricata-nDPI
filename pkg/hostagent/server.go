@@ -42,13 +42,8 @@ func New(deps Deps) (*Server, error) {
 		deps.FS = fsutil.OSFS{}
 	}
 
-	if info, err := os.Stat(deps.SocketPath); err == nil {
-		if (info.Mode() & os.ModeSocket) == 0 {
-			return nil, fmt.Errorf("socket path exists but is not a unix socket: %s", deps.SocketPath)
-		}
-		_ = os.Remove(deps.SocketPath)
-	} else if !os.IsNotExist(err) {
-		return nil, fmt.Errorf("cannot access socket path %s: %w", deps.SocketPath, err)
+	if err := removeIfSocket(deps.SocketPath); err != nil {
+		return nil, err
 	}
 
 	ln, err := net.Listen("unix", deps.SocketPath)
@@ -69,6 +64,9 @@ func New(deps Deps) (*Server, error) {
 	s := &http.Server{
 		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       5 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		IdleTimeout:       30 * time.Second,
 	}
 
 	return &Server{
@@ -79,7 +77,6 @@ func New(deps Deps) (*Server, error) {
 }
 
 func (s *Server) Start(ctx context.Context) error {
-	_ = ctx
 	logger.Infow("Host agent started",
 		"socket", s.deps.SocketPath,
 		"unit", s.deps.SuricataUnit,
@@ -87,10 +84,24 @@ func (s *Server) Start(ctx context.Context) error {
 		"ndpi_plugin", s.deps.NDPIPluginPath,
 	)
 
-	if err := s.server.Serve(s.ln); err != nil && err != http.ErrServerClosed {
+	errCh := make(chan error, 1)
+	go func() {
+		if err := s.server.Serve(s.ln); err != nil && err != http.ErrServerClosed {
+			errCh <- err
+			return
+		}
+		errCh <- nil
+	}()
+
+	select {
+	case <-ctx.Done():
+		shCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_ = s.Stop(shCtx)
+		return nil
+	case err := <-errCh:
 		return err
 	}
-	return nil
 }
 
 func (s *Server) Stop(ctx context.Context) error {
@@ -99,7 +110,29 @@ func (s *Server) Stop(ctx context.Context) error {
 	if s.ln != nil {
 		_ = s.ln.Close()
 	}
-	_ = os.Remove(s.deps.SocketPath)
+
+	if rmErr := removeIfSocket(s.deps.SocketPath); rmErr != nil {
+		logger.Warnw("Failed to remove socket path", "path", s.deps.SocketPath, "error", rmErr)
+	}
 
 	return err
+}
+
+func removeIfSocket(path string) error {
+	info, err := os.Lstat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("cannot access socket path %s: %w", path, err)
+	}
+
+	if (info.Mode() & os.ModeSocket) == 0 {
+		return fmt.Errorf("socket path exists but is not a unix socket: %s", path)
+	}
+
+	if err := os.Remove(path); err != nil {
+		return fmt.Errorf("failed to remove unix socket %s: %w", path, err)
+	}
+	return nil
 }
