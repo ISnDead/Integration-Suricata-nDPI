@@ -148,6 +148,9 @@ The Host Agent exposes a small HTTP API over a Unix socket:
 
 ### Example usage
 
+Start host-agent:
+  - `sudo ./bin/host-agent serve --config config/config.yaml --sock /run/ndpi-agent.sock`
+
 Enable nDPI
   - `sudo curl -X POST --unix-socket /run/ndpi-agent.sock http://localhost/ndpi/enable`
 
