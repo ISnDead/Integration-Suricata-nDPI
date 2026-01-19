@@ -18,7 +18,7 @@ func EnsureSuricataRunningWithDialer(socketCandidates []string, dialer netutil.D
 		dialer = netutil.DefaultDialer{}
 	}
 
-	socketPath, err := FirstExistingPath(socketCandidates)
+	socketPath, err := FirstExistingSocket(socketCandidates)
 	if err != nil {
 		return fmt.Errorf("suricata is unavailable: control socket not found: %w", err)
 	}

@@ -26,20 +26,26 @@ type ndpiStatusResp struct {
 	Line    string `json:"line"`
 }
 
-type ndpiToggleResp struct {
-	Changed bool `json:"changed"`
-	Enabled bool `json:"enabled"`
+type toggleResp struct {
+	OK      bool   `json:"ok"`
+	Changed bool   `json:"changed"`
+	Enabled bool   `json:"enabled,omitempty"`
+	Message string `json:"message,omitempty"`
 }
 
 func (h *Handlers) NDPIStatus(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
-	enabled, line, err := integration.NDPIStatusWithFS(h.deps.SuricataCfgPath, h.deps.NDPIPluginPath, h.deps.FS)
+	enabled, line, err := integration.NDPIStatusWithFS(
+		h.deps.SuricataCfgPath,
+		h.deps.NDPIPluginPath,
+		h.deps.FS,
+	)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -48,52 +54,85 @@ func (h *Handlers) NDPIStatus(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handlers) NDPIEnable(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
-	changed, enabledAfter, err := integration.SetNDPIEnabledWithFS(h.deps.SuricataCfgPath, h.deps.NDPIPluginPath, true, h.deps.FS)
+	changed, enabledAfter, err := integration.SetNDPIEnabledWithFS(
+		h.deps.SuricataCfgPath,
+		h.deps.NDPIPluginPath,
+		true,
+		h.deps.FS,
+	)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	if changed {
 		if err := h.deps.Systemd.Restart(r.Context(), h.deps.SuricataUnit, h.deps.RestartTimeout); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			writeErr(w, http.StatusBadRequest, err.Error())
 			return
 		}
 	}
 
 	logger.Infow("NDPI enabled", "changed", changed)
-	writeJSON(w, ndpiToggleResp{Changed: changed, Enabled: enabledAfter})
+	writeJSON(w, toggleResp{
+		OK:      true,
+		Changed: changed,
+		Enabled: enabledAfter,
+		Message: "ok",
+	})
 }
 
 func (h *Handlers) NDPIDisable(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
-	changed, enabledAfter, err := integration.SetNDPIEnabledWithFS(h.deps.SuricataCfgPath, h.deps.NDPIPluginPath, false, h.deps.FS)
+	changed, enabledAfter, err := integration.SetNDPIEnabledWithFS(
+		h.deps.SuricataCfgPath,
+		h.deps.NDPIPluginPath,
+		false,
+		h.deps.FS,
+	)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	if changed {
 		if err := h.deps.Systemd.Restart(r.Context(), h.deps.SuricataUnit, h.deps.RestartTimeout); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			writeErr(w, http.StatusBadRequest, err.Error())
 			return
 		}
 	}
 
 	logger.Infow("NDPI disabled", "changed", changed)
-	writeJSON(w, ndpiToggleResp{Changed: changed, Enabled: enabledAfter})
+	writeJSON(w, toggleResp{
+		OK:      true,
+		Changed: changed,
+		Enabled: enabledAfter,
+		Message: "ok",
+	})
+}
+
+func writeErr(w http.ResponseWriter, status int, msg string) {
+	writeJSONWithStatus(w, status, toggleResp{
+		OK:      false,
+		Changed: false,
+		Message: msg,
+	})
 }
 
 func writeJSON(w http.ResponseWriter, v any) {
+	writeJSONWithStatus(w, http.StatusOK, v)
+}
+
+func writeJSONWithStatus(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	_ = enc.Encode(v)
