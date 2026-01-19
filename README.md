@@ -4,10 +4,11 @@ Integration Suricata + nDPI automates configuration management for Suricata depl
 
 ## Key capabilities
 
-- Generates suricata.yaml from a template and writes it atomically (safe update).
-- Performs best-effort reload/reconfigure via suricatasc to apply rule/config changes that Suricata can reload without restarting.
-- Validates local resources and nDPI-related paths (ndpi.so, rules directory, template, suricatasc).
-- Checks Suricata availability via the unix control socket.
+  - Generates suricata.yaml from a template (with environment variable rendering) and writes it atomically to prevent partial/invalid config updates.
+  - Applies reloadable Suricata changes using best-effort suricatasc reload/reconfigure, avoiding service downtime when restart is not required.
+  - Validates local resources and nDPI-related inputs (plugin ndpi.so, rules directory, template integrity, suricatasc binary) before applying changes.
+  - Verifies Suricata availability via the Unix control socket (selecting a working socket candidate, not just an existing path).
+  - Provides a host-side agent API over a Unix socket to enable/disable the nDPI plugin by editing the active Suricata config and restarting Suricata via systemd only when a state change is needed.
 
 ## Important note about nDPI plugin activation
 
