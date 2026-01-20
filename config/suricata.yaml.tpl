@@ -56,8 +56,7 @@ stats:
 # Plugins (nDPI)
 plugins:
   - /usr/local/lib/suricata/ndpi.so
-  # альтернативно:
-  # - /usr/lib/suricata/ndpi.so
+
 
 outputs:
   - fast:
@@ -114,7 +113,7 @@ logging:
 ##
 
 af-packet:
-  - interface: enp0s3
+  - interface: ${SURICATA_IFACE}
     cluster-id: 99
     cluster-type: cluster_flow
     defrag: yes

@@ -16,10 +16,9 @@ suricata:
     - "/var/run/suricata/suricata-command.socket"
   config_candidates:
     - "/etc/suricata/suricata.yaml"
-    - "/usr/local/etc/suricata/suricata.yaml"
 
 reload:
-  timeout: "3m"
+  timeout: "1m"
   command: "reload-rules"
 
 system: 

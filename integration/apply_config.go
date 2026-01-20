@@ -13,6 +13,8 @@ import (
 	"integration-suricata-ndpi/pkg/logger"
 )
 
+const defaultReloadTimeout = 10 * time.Second
+
 func ApplyConfig(opts ApplyConfigOptions) (ApplyConfigReport, error) {
 	templatePath := opts.TemplatePath
 	configCandidates := opts.ConfigCandidates
@@ -72,15 +74,13 @@ func ApplyConfig(opts ApplyConfigOptions) (ApplyConfigReport, error) {
 
 	if cmdNormalized == "" || cmdNormalized == "none" {
 		report.ReloadStatus = ReloadOK
-		report.Warnings = append(report.Warnings, "reload_command empty/none: config written, reload skipped")
-		logger.Warnw("reload_command empty/none: reload skipped",
-			"reload_command", reloadCommand,
-		)
+		report.Warnings = append(report.Warnings, "reload_command empty/none: reload skipped")
+		logger.Warnw("reload_command empty/none: reload skipped", "reload_command", reloadCommand)
 		return report, nil
 	}
 
 	if reloadTimeout <= 0 {
-		reloadTimeout = 10 * time.Second
+		reloadTimeout = defaultReloadTimeout
 		report.ReloadTimeout = reloadTimeout
 	}
 
