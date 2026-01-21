@@ -56,6 +56,15 @@ func ApplyConfig(opts ApplyConfigOptions) (ApplyConfigReport, error) {
 		return report, fmt.Errorf("failed to read template %s: %w", templatePath, err)
 	}
 
+	rendered, rr, err := RenderTemplateStrict(tmplData)
+	if err != nil {
+		return report, fmt.Errorf("failed to render template %s: %w", templatePath, err)
+	}
+	if len(rr.Vars) > 0 {
+		logger.Infow("Template rendered with env vars", "vars", rr.Vars)
+	}
+	tmplData = rendered
+
 	targetConfigPath, err := FirstExistingPath(configCandidates)
 	if err != nil {
 		return report, fmt.Errorf("suricata.yaml not found in candidates: %w", err)

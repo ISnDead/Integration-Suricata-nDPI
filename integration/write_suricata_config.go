@@ -21,6 +21,12 @@ func WriteSuricataConfigFromTemplateWithFS(templatePath string, configCandidates
 		return "", fmt.Errorf("read template: %w", err)
 	}
 
+	rendered, _, err := RenderTemplateStrict(tpl)
+	if err != nil {
+		return "", fmt.Errorf("render template: %w", err)
+	}
+	tpl = rendered
+
 	targetPath, err = FirstExistingPath(configCandidates)
 	if err != nil {
 		return "", fmt.Errorf("find target suricata.yaml: %w", err)

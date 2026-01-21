@@ -32,9 +32,14 @@ func PlanConfig(opts ApplyConfigOptions) (PlanReport, error) {
 		TemplatePath: opts.TemplatePath,
 	}
 
-	rendered, err := fs.ReadFile(opts.TemplatePath)
+	tpl, err := fs.ReadFile(opts.TemplatePath)
 	if err != nil {
 		return rep, fmt.Errorf("failed to read template %s: %w", opts.TemplatePath, err)
+	}
+
+	rendered, _, err := RenderTemplateStrict(tpl)
+	if err != nil {
+		return rep, fmt.Errorf("failed to render template %s: %w", opts.TemplatePath, err)
 	}
 
 	target, err := FirstExistingPath(opts.ConfigCandidates)
