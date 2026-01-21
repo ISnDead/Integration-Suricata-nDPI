@@ -3,7 +3,10 @@ package hostagent
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"io/fs"
 	"net/http"
+	"strings"
 
 	"integration-suricata-ndpi/integration"
 	"integration-suricata-ndpi/pkg/logger"
@@ -23,20 +26,24 @@ func (h *Handlers) Health(w http.ResponseWriter, r *http.Request) {
 }
 
 type ndpiStatusResp struct {
+	OK      bool   `json:"ok"`
 	Enabled bool   `json:"enabled"`
-	Line    string `json:"line"`
+	Line    string `json:"line,omitempty"`
+	Code    string `json:"code,omitempty"`
+	Message string `json:"message,omitempty"`
 }
 
 type toggleResp struct {
 	OK      bool   `json:"ok"`
 	Changed bool   `json:"changed"`
 	Enabled bool   `json:"enabled,omitempty"`
+	Code    string `json:"code,omitempty"`
 	Message string `json:"message,omitempty"`
 }
 
 func (h *Handlers) NDPIStatus(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
+		writeErrPublic(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "method not allowed", nil)
 		return
 	}
 
@@ -46,16 +53,16 @@ func (h *Handlers) NDPIStatus(w http.ResponseWriter, r *http.Request) {
 		h.deps.FS,
 	)
 	if err != nil {
-		writeErr(w, http.StatusBadRequest, err.Error())
+		writeErrFromErr(w, err)
 		return
 	}
 
-	writeJSON(w, ndpiStatusResp{Enabled: enabled, Line: line})
+	writeJSON(w, ndpiStatusResp{OK: true, Enabled: enabled, Line: line})
 }
 
 func (h *Handlers) NDPIEnable(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
+		writeErrPublic(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "method not allowed", nil)
 		return
 	}
 
@@ -66,7 +73,7 @@ func (h *Handlers) NDPIEnable(w http.ResponseWriter, r *http.Request) {
 		h.deps.FS,
 	)
 	if err != nil {
-		writeErr(w, http.StatusBadRequest, err.Error())
+		writeErrFromErr(w, err)
 		return
 	}
 
@@ -75,8 +82,7 @@ func (h *Handlers) NDPIEnable(w http.ResponseWriter, r *http.Request) {
 		defer cancel()
 
 		if err := h.deps.Systemd.Restart(ctx, h.deps.SuricataUnit, h.deps.RestartTimeout); err != nil {
-			logger.Errorw("systemd restart failed", "unit", h.deps.SuricataUnit, "error", err)
-			writeErr(w, http.StatusInternalServerError, "failed to restart suricata")
+			writeErrPublic(w, http.StatusInternalServerError, "RESTART_FAILED", "failed to restart suricata", err)
 			return
 		}
 	}
@@ -92,7 +98,7 @@ func (h *Handlers) NDPIEnable(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handlers) NDPIDisable(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
+		writeErrPublic(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "method not allowed", nil)
 		return
 	}
 
@@ -103,7 +109,7 @@ func (h *Handlers) NDPIDisable(w http.ResponseWriter, r *http.Request) {
 		h.deps.FS,
 	)
 	if err != nil {
-		writeErr(w, http.StatusBadRequest, err.Error())
+		writeErrFromErr(w, err)
 		return
 	}
 
@@ -112,8 +118,7 @@ func (h *Handlers) NDPIDisable(w http.ResponseWriter, r *http.Request) {
 		defer cancel()
 
 		if err := h.deps.Systemd.Restart(ctx, h.deps.SuricataUnit, h.deps.RestartTimeout); err != nil {
-			logger.Errorw("systemd restart failed", "unit", h.deps.SuricataUnit, "error", err)
-			writeErr(w, http.StatusInternalServerError, "failed to restart suricata")
+			writeErrPublic(w, http.StatusInternalServerError, "RESTART_FAILED", "failed to restart suricata", err)
 			return
 		}
 	}
@@ -127,12 +132,41 @@ func (h *Handlers) NDPIDisable(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func writeErr(w http.ResponseWriter, status int, msg string) {
+func writeErrFromErr(w http.ResponseWriter, err error) {
+	status, code, msg := classifyErr(err)
+	writeErrPublic(w, status, code, msg, err)
+}
+
+func writeErrPublic(w http.ResponseWriter, status int, code, msg string, err error) {
+	if err != nil {
+		logger.Errorw("host-agent request failed", "code", code, "status", status, "error", err)
+	}
 	writeJSONWithStatus(w, status, toggleResp{
 		OK:      false,
 		Changed: false,
+		Code:    code,
 		Message: msg,
 	})
+}
+
+func classifyErr(err error) (status int, code, msg string) {
+	if err == nil {
+		return http.StatusInternalServerError, "INTERNAL", "internal error"
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return http.StatusGatewayTimeout, "TIMEOUT", "operation timed out"
+	}
+	if errors.Is(err, fs.ErrNotExist) {
+		return http.StatusInternalServerError, "NOT_FOUND", "required file/path not found on host"
+	}
+	if errors.Is(err, fs.ErrPermission) {
+		return http.StatusInternalServerError, "PERMISSION", "permission denied on host"
+	}
+	if strings.Contains(err.Error(), "ndpi plugin line not found") {
+		return http.StatusConflict, "NDPI_NOT_CONFIGURED", "ndpi plugin line not found in suricata config"
+	}
+
+	return http.StatusInternalServerError, "INTERNAL", "internal error"
 }
 
 func writeJSON(w http.ResponseWriter, v any) {

@@ -2,10 +2,12 @@ package hostagent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"os"
+	"syscall"
 	"time"
 
 	"integration-suricata-ndpi/pkg/fsutil"
@@ -131,8 +133,39 @@ func removeIfSocket(path string) error {
 		return fmt.Errorf("socket path exists but is not a unix socket: %s", path)
 	}
 
+	conn, dialErr := net.DialTimeout("unix", path, 200*time.Millisecond)
+	if dialErr == nil {
+		_ = conn.Close()
+		return fmt.Errorf("unix socket already in use (another process is listening): %s", path)
+	}
+
+	if !isStaleUnixSocketDialError(dialErr) {
+		return fmt.Errorf("cannot remove unix socket %s: dial failed with unexpected error: %w", path, dialErr)
+	}
+
 	if err := os.Remove(path); err != nil {
 		return fmt.Errorf("failed to remove unix socket %s: %w", path, err)
 	}
 	return nil
+}
+
+func isStaleUnixSocketDialError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	var opErr *net.OpError
+	if errors.As(err, &opErr) {
+		var scErr *os.SyscallError
+		if errors.As(opErr.Err, &scErr) {
+			if errno, ok := scErr.Err.(syscall.Errno); ok {
+				return errno == syscall.ECONNREFUSED || errno == syscall.ENOENT
+			}
+		}
+		if errors.Is(opErr.Err, syscall.ECONNREFUSED) || errors.Is(opErr.Err, syscall.ENOENT) {
+			return true
+		}
+	}
+
+	return errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, syscall.ENOENT)
 }
