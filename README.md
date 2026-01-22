@@ -1,4 +1,4 @@
-# Integration Suricata + nDPI
+<img width="1361" height="439" alt="image" src="https://github.com/user-attachments/assets/23e57bad-d64c-4aeb-892f-89db4f26c15e" /><img width="1361" height="439" alt="image" src="https://github.com/user-attachments/assets/ecb88cec-7da1-48f6-8719-506c62a8cb97" /># Integration Suricata + nDPI
 
 Integration Suricata + nDPI automates configuration management for Suricata deployments that use the nDPI plugin.
 
@@ -23,7 +23,7 @@ Integration Suricata + nDPI automates configuration management for Suricata depl
 
 ### Run
 
-- `sudo ./bin/integration -config config/config.yaml`
+- `sudo ./bin/integration run --config config/config.yaml`
 
 ### Configuration
 
