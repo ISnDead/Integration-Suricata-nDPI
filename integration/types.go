@@ -60,3 +60,8 @@ const (
 	ReloadTimeout ReloadStatus = "timeout"
 	ReloadFailed  ReloadStatus = "failed"
 )
+
+type RunnerOptions struct {
+	Apply        ApplyConfigOptions
+	NDPIValidate NDPIValidateOptions
+}

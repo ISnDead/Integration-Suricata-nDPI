@@ -1,5 +1,7 @@
 http:
   addr: ":8080"
+  host_agent_socket: "/run/ndpi-agent.sock"
+  host_agent_timeout: "10s"
 
 paths:
   ndpi_rules_local: "rules/ndpi/"

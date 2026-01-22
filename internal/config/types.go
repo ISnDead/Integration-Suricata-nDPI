@@ -3,7 +3,9 @@ package config
 import "time"
 
 type HTTPConfig struct {
-	Addr string `yaml:"addr"`
+	Addr             string        `yaml:"addr"`
+	HostAgentSocket  string        `yaml:"host_agent_socket"`
+	HostAgentTimeout time.Duration `yaml:"host_agent_timeout"`
 }
 
 type PathsConfig struct {

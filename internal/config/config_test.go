@@ -14,6 +14,12 @@ func TestApplyDefaults(t *testing.T) {
 	if cfg.HTTP.Addr != ":8080" {
 		t.Fatalf("http.addr: want :8080, got %q", cfg.HTTP.Addr)
 	}
+	if cfg.HTTP.HostAgentSocket != "/run/ndpi-agent.sock" {
+		t.Fatalf("http.host_agent_socket: want /run/ndpi-agent.sock, got %q", cfg.HTTP.HostAgentSocket)
+	}
+	if cfg.HTTP.HostAgentTimeout != 10*time.Second {
+		t.Fatalf("http.host_agent_timeout: want 10s, got %v", cfg.HTTP.HostAgentTimeout)
+	}
 	if cfg.Reload.Timeout != 5*time.Second {
 		t.Fatalf("reload.timeout: want 5s, got %v", cfg.Reload.Timeout)
 	}
@@ -111,7 +117,6 @@ reload:
 	if cfg.Reload.Timeout != 2*time.Second {
 		t.Fatalf("timeout: want 2s, got %v", cfg.Reload.Timeout)
 	}
-	// defaults должны заполнить system.*
 	if cfg.System.Systemctl == "" || cfg.System.SuricataService == "" {
 		t.Fatalf("system defaults not applied: %+v", cfg.System)
 	}
