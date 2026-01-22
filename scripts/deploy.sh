@@ -138,7 +138,29 @@ if [[ -z "$TARGET_CONFIG" ]]; then
 fi
 [[ -n "$TARGET_CONFIG" ]] || die "Failed to resolve target Suricata config path"
 
-# ---- Render template ----
+detect_iface() {
+  local iface=""
+  if command -v ip >/dev/null 2>&1; then
+    iface="$(ip route 2>/dev/null | awk '/^default/ {print $5; exit}')"
+    if [[ -z "$iface" ]]; then
+      iface="$(ip route get 1.1.1.1 2>/dev/null | awk '/dev/ {for (i=1;i<=NF;i++) if ($i=="dev") {print $(i+1); exit}}')"
+    fi
+  fi
+  printf '%s' "${iface:-}"
+}
+
+if grep -q '\${SURICATA_IFACE}' "$SURICATA_TEMPLATE"; then
+  if [[ -z "${SURICATA_IFACE:-}" ]]; then
+    SURICATA_IFACE="$(detect_iface)"
+    if [[ -n "$SURICATA_IFACE" ]]; then
+      export SURICATA_IFACE
+      vlog "Auto-detected SURICATA_IFACE=$SURICATA_IFACE"
+    else
+      die "SURICATA_IFACE is not set and could not be auto-detected"
+    fi
+  fi
+fi
+
 render_template() {
   local tpl="$1"
 
@@ -163,82 +185,9 @@ NEW_RENDERED="$(mktemp)"
 cleanup() { rm -f "$NEW_RENDERED" "${NEW_RENDERED}.diff" "${NEW_RENDERED}.tmp"; }
 trap cleanup EXIT
 
-render_template "$SURICATA_TEMPLATE" > "$NEW_RENDERED"
-
-# ---- Plan / Diff ----
-log "=== Deploy plan ==="
-log "Config file:      $CONFIG_PATH"
-log "Template:         $SURICATA_TEMPLATE"
-log "Target config:    $TARGET_CONFIG"
-log "suricatasc:       ${SURICATASC_PATH:-<empty>}"
-log "reload.command:   ${RELOAD_CMD:-<empty>}"
-log "reload.timeout:   ${RELOAD_TIMEOUT_RAW:-<empty>}"
-if [[ "${#SOCKET_CANDIDATES[@]}" -gt 0 ]]; then
-  log "socket.candidates:"
-  for s in "${SOCKET_CANDIDATES[@]}"; do
-    s="$(trim "$s")"
-    [[ -n "$s" ]] && log "  - $s"
-  done
-fi
-
-# If current config exists, show diff (best-effort)
-if [[ -f "$TARGET_CONFIG" ]]; then
-  if diff -u "$TARGET_CONFIG" "$NEW_RENDERED" > "${NEW_RENDERED}.diff" 2>/dev/null; then
-    log "Diff: no changes"
-    CHANGED=0
-  else
-    log "Diff: changes detected"
-    CHANGED=1
-    if [[ "$MODE" == "dry-run" ]]; then
-      log "----- diff (current vs new) -----"
-      cat "${NEW_RENDERED}.diff" || true
-      log "--------------------------------"
-    fi
-  fi
-else
-  log "Target config does not exist yet: it will be created"
-  CHANGED=1
-fi
-
-if [[ "$MODE" == "dry-run" ]]; then
-  log "Dry-run complete."
-  exit 0
-fi
-
-# ---- Apply ----
-[[ "$EUID" -eq 0 ]] || die "Apply mode requires root (run with sudo)"
-
-if [[ "$CHANGED" -eq 0 ]]; then
-  log "No config changes. Skipping write and reload."
-  exit 0
-fi
-
-# Preserve permissions if file exists, else default 0644.
-PERM="0644"
-if [[ -e "$TARGET_CONFIG" ]]; then
-  PERM="$(stat -c '%a' "$TARGET_CONFIG" 2>/dev/null || echo "0644")"
-fi
-
-TMP_OUT="${NEW_RENDERED}.tmp"
-umask 022
-cp "$NEW_RENDERED" "$TMP_OUT"
-chmod "$PERM" "$TMP_OUT" || true
-mv -f "$TMP_OUT" "$TARGET_CONFIG"
-
-log "Config written atomically: $TARGET_CONFIG"
-
-# Reload (best-effort)
-cmd_norm="$(echo "$RELOAD_CMD" | tr '[:upper:]' '[:lower:]' | xargs || true)"
-if [[ -z "$cmd_norm" || "$cmd_norm" == "none" ]]; then
-  log "Reload skipped (reload.command is empty/none)."
-  exit 0
-fi
-[[ "$cmd_norm" != "shutdown" ]] || die "reload.command=shutdown is forbidden"
-
 [[ -n "$SURICATASC_PATH" ]] || die "paths.suricatasc is empty but reload.command is set"
 [[ -x "$SURICATASC_PATH" ]] || die "suricatasc is not executable: $SURICATASC_PATH"
 
-# Timeout: accept values like 10s, 2m, etc. If empty -> 10s.
 RELOAD_TIMEOUT="10s"
 if [[ -n "$RELOAD_TIMEOUT_RAW" ]]; then
   RELOAD_TIMEOUT="$RELOAD_TIMEOUT_RAW"

@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"regexp"
@@ -46,6 +47,23 @@ func RenderTemplateStrict(in []byte) ([]byte, RenderReport, error) {
 		env[v] = val
 	}
 	if len(missing) > 0 {
+		autoVars, err := autoDetectEnv(missing)
+		if err != nil {
+			return nil, RenderReport{Vars: vars}, err
+		}
+		for k, v := range autoVars {
+			env[k] = v
+		}
+
+		var stillMissing []string
+		for _, v := range missing {
+			if _, ok := env[v]; !ok {
+				stillMissing = append(stillMissing, v)
+			}
+		}
+		missing = stillMissing
+	}
+	if len(missing) > 0 {
 		return nil, RenderReport{Vars: vars},
 			fmt.Errorf("template requires env vars not set: %s", strings.Join(missing, ", "))
 	}
@@ -56,4 +74,60 @@ func RenderTemplateStrict(in []byte) ([]byte, RenderReport, error) {
 	})
 
 	return []byte(out), RenderReport{Vars: vars}, nil
+}
+
+func autoDetectEnv(missing []string) (map[string]string, error) {
+	out := make(map[string]string)
+	needsIface := false
+	for _, v := range missing {
+		if v == "SURICATA_IFACE" {
+			needsIface = true
+			break
+		}
+	}
+	if !needsIface {
+		return out, nil
+	}
+
+	iface, err := detectDefaultIface()
+	if err != nil {
+		return nil, err
+	}
+	if iface != "" {
+		out["SURICATA_IFACE"] = iface
+	}
+	return out, nil
+}
+
+func detectDefaultIface() (string, error) {
+	file, err := os.Open("/proc/net/route")
+	if err != nil {
+		return "", fmt.Errorf("failed to read /proc/net/route: %w", err)
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	first := true
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		if first {
+			first = false
+			continue
+		}
+
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		if fields[1] == "00000000" {
+			return fields[0], nil
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return "", fmt.Errorf("failed to scan /proc/net/route: %w", err)
+	}
+	return "", fmt.Errorf("default interface not found in /proc/net/route")
 }
