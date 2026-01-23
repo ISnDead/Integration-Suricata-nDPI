@@ -1,0 +1,21 @@
+name: test rules
+on:
+  push:
+    branches:
+      - sobik
+
+jobs:
+  validate_rules:
+    name: check
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: sh
+        working-directory: ./scripts
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Make the script files executable
+        run: chmod +x test_rules.sh
+      - name: Run the script
+        run: ./rules_validation_script.sh

@@ -1,0 +1,7 @@
+alert
+pass
+drop
+reject
+rejectsrc
+rejectdst
+rejectboth
