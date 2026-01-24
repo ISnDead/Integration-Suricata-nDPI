@@ -33,5 +33,11 @@ func buildRunnerOptions(cfg *config.Config, runner executil.Runner, fs fsutil.FS
 			ExpectedRulesPattern: ndpi.ExpectedRulesPattern,
 			FS:                   fs,
 		},
+		SuricataStart: SuricataStartOptions{
+			SocketCandidates: suricata.SocketCandidates,
+			SystemctlPath:    cfg.System.Systemctl,
+			SystemdUnit:      cfg.System.SuricataService,
+			StartTimeout:     reload.Timeout,
+		},
 	}
 }

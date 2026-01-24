@@ -1,8 +1,11 @@
 module integration-suricata-ndpi
 
-go 1.22.2
+go 1.23
+
+toolchain go1.24.12
 
 require (
+	github.com/coreos/go-systemd/v22 v22.6.0
 	github.com/google/wire v0.7.0
 	github.com/urfave/cli/v2 v2.27.7
 	go.uber.org/zap v1.27.1

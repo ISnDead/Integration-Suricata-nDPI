@@ -1,0 +1,9 @@
+[Unit]
+Description=nDPI Host Agent
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/host-agent serve --config /etc/integration-suricata-ndpi/config.yaml --sock /run/ndpi-agent.sock
+Restart=on-failure
+RestartSec=2

@@ -13,12 +13,15 @@ import (
 	"integration-suricata-ndpi/pkg/fsutil"
 	"integration-suricata-ndpi/pkg/logger"
 	"integration-suricata-ndpi/pkg/systemd"
+
+	"github.com/coreos/go-systemd/v22/activation"
 )
 
 type Server struct {
-	deps   Deps
-	ln     net.Listener
-	server *http.Server
+	deps       Deps
+	ln         net.Listener
+	server     *http.Server
+	ownsSocket bool
 }
 
 func New(deps Deps) (*Server, error) {
@@ -44,16 +47,10 @@ func New(deps Deps) (*Server, error) {
 		deps.FS = fsutil.OSFS{}
 	}
 
-	if err := removeIfSocket(deps.SocketPath); err != nil {
+	ln, usingActivation, err := getListener(deps.SocketPath)
+	if err != nil {
 		return nil, err
 	}
-
-	ln, err := net.Listen("unix", deps.SocketPath)
-	if err != nil {
-		return nil, fmt.Errorf("listen unix %s: %w", deps.SocketPath, err)
-	}
-
-	_ = os.Chmod(deps.SocketPath, 0o660)
 
 	h := NewHandlers(deps)
 
@@ -72,14 +69,40 @@ func New(deps Deps) (*Server, error) {
 	}
 
 	return &Server{
-		deps:   deps,
-		ln:     ln,
-		server: s,
+		deps:       deps,
+		ln:         ln,
+		server:     s,
+		ownsSocket: !usingActivation,
 	}, nil
 }
 
+func getListener(socketPath string) (net.Listener, bool, error) {
+	listeners, err := activation.Listeners()
+	if err == nil && len(listeners) > 0 {
+		return listeners[0], true, nil
+	}
+
+	if err := removeIfSocket(socketPath); err != nil {
+		return nil, false, err
+	}
+
+	ln, err := net.Listen("unix", socketPath)
+	if err != nil {
+		return nil, false, fmt.Errorf("listen unix %s: %w", socketPath, err)
+	}
+
+	_ = os.Chmod(socketPath, 0o660)
+	return ln, false, nil
+}
+
 func (s *Server) Start(ctx context.Context) error {
+	mode := "standalone (net.Listen unix)"
+	if !s.ownsSocket {
+		mode = "systemd socket-activation"
+	}
+
 	logger.Infow("Host agent started",
+		"mode", mode,
 		"socket", s.deps.SocketPath,
 		"unit", s.deps.SuricataUnit,
 		"suricata_config", s.deps.SuricataCfgPath,
@@ -113,8 +136,10 @@ func (s *Server) Stop(ctx context.Context) error {
 		_ = s.ln.Close()
 	}
 
-	if rmErr := removeIfSocket(s.deps.SocketPath); rmErr != nil {
-		logger.Warnw("Failed to remove socket path", "path", s.deps.SocketPath, "error", rmErr)
+	if s.ownsSocket {
+		if rmErr := removeIfSocket(s.deps.SocketPath); rmErr != nil {
+			logger.Warnw("Failed to remove socket path", "path", s.deps.SocketPath, "error", rmErr)
+		}
 	}
 
 	return err

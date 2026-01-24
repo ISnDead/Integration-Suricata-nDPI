@@ -12,6 +12,13 @@ func ConnectSuricata(socketCandidates []string, timeout time.Duration) (*Suricat
 	return ConnectSuricataWithDialer(socketCandidates, timeout, nil)
 }
 
+func ConnectSuricataWithStart(opts SuricataStartOptions, timeout time.Duration) (*SuricataClient, error) {
+	if err := EnsureSuricataStarted(opts); err != nil {
+		return nil, err
+	}
+	return ConnectSuricataWithDialer(opts.SocketCandidates, timeout, opts.Dialer)
+}
+
 func ConnectSuricataWithDialer(socketCandidates []string, timeout time.Duration, dialer netutil.Dialer) (*SuricataClient, error) {
 	if dialer == nil {
 		dialer = netutil.DefaultDialer{}

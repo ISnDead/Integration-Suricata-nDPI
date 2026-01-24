@@ -10,7 +10,7 @@ paths:
   suricatasc: "/usr/local/bin/suricatasc"
 
 ndpi:
-  expected_rules_pattern: "var/lib/suricata/rules/ndpi/*.rules"
+  expected_rules_pattern: "/var/lib/suricata/rules/ndpi/*.rules"
 
 suricata:
   socket_candidates:

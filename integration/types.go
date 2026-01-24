@@ -6,6 +6,8 @@ import (
 
 	"integration-suricata-ndpi/pkg/executil"
 	"integration-suricata-ndpi/pkg/fsutil"
+	"integration-suricata-ndpi/pkg/netutil"
+	"integration-suricata-ndpi/pkg/systemd"
 )
 
 type SuricataClient struct {
@@ -62,6 +64,16 @@ const (
 )
 
 type RunnerOptions struct {
-	Apply        ApplyConfigOptions
-	NDPIValidate NDPIValidateOptions
+	Apply         ApplyConfigOptions
+	NDPIValidate  NDPIValidateOptions
+	SuricataStart SuricataStartOptions
+}
+
+type SuricataStartOptions struct {
+	SocketCandidates []string
+	SystemctlPath    string
+	SystemdUnit      string
+	StartTimeout     time.Duration
+	Dialer           netutil.Dialer
+	Systemd          systemd.Manager
 }

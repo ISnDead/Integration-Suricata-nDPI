@@ -17,6 +17,7 @@ type ToggleResponse struct {
 	OK      bool   `json:"ok"`
 	Changed bool   `json:"changed"`
 	Message string `json:"message"`
+	Enabled bool   `json:"enabled,omitempty"`
 }
 
 func New(sockPath string, timeout time.Duration) *Client {

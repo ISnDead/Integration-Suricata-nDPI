@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"time"
 
 	"integration-suricata-ndpi/internal/config"
 	"integration-suricata-ndpi/pkg/executil"
@@ -63,6 +64,20 @@ func (r *Runner) Start(ctx context.Context) error {
 	if err := ValidateNDPIConfig(r.opts.NDPIValidate); err != nil {
 		return fmt.Errorf("step 2 (validate ndpi config) failed: %w", err)
 	}
+
+	if err := r.checkContext(ctx); err != nil {
+		return err
+	}
+
+	connectTimeout := r.opts.SuricataStart.StartTimeout
+	if connectTimeout <= 0 {
+		connectTimeout = 5 * time.Second
+	}
+	client, err := ConnectSuricataWithStart(r.opts.SuricataStart, connectTimeout)
+	if err != nil {
+		return fmt.Errorf("step 3 (ensure suricata running) failed: %w", err)
+	}
+	_ = client.Conn.Close()
 
 	if err := r.checkContext(ctx); err != nil {
 		return err
