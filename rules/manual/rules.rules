@@ -2,4 +2,3 @@ alert http any any -> $EXTERNAL_NET any (msg:"HTTP GET Request Containing Rule i
 alert tcp any any -> any 53 (msg:"TLS traffic over DNS standard port"; requires:keyword ndpi-protocol; ndpi-protocol:TLS; metadata:mitre_technique_id T1119; sid:1;)
 alert tcp any any -> any any (msg:"Yandex"; requires:keyword ndpi-protocol; ndpi-protocol:Yandex; sid:100008;)
 alert tcp any any -> any 53 (msg:"TLS traffic over DNS standard port"; requires:keyword ndpi-protocol; ndpi-protocol:TLS; metadata:mitre_technique_id T1119; sid:1;)
-alert tcp any any -> any any (msg:"Yandex"; requires:keyword ndpi-protocol; ndpi-protocol:Yandex; sid:100008;)
