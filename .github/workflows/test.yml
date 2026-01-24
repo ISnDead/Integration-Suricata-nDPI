@@ -32,7 +32,7 @@ jobs:
           git commit -a -m "Rewriting valid rules"
 
       - name: Commit files
-        uses: ad-m/github-push-action@main
+        uses: ad-m/github-push-action@master
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           branch: ${{ github.ref }}
