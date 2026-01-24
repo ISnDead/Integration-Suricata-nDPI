@@ -10,10 +10,13 @@ jobs:
   validate_rules:
     name: check
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     defaults:
       run:
         shell: bash
         working-directory: ./scripts
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -21,3 +24,15 @@ jobs:
         run: chmod +x rules_validation_script.sh
       - name: Run the script
         run: ./rules_validation_script.sh
+      - name: Commit and push if changed
+
+        run: |
+          git config --local user.email "github-action[bot]@user.github.com"
+          git config --local user.name "github-action[bot]"
+          git commit -a -m "Rewriting valid rules"
+
+      - name: Commit files
+        uses: ad-m/github-push-action@main
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          branch: ${{ github.ref }}

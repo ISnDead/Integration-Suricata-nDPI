@@ -77,18 +77,27 @@ field_enumeration () {
 	fi
 }
 
-> err.txt
+> ../rules/checked/valid_rules.rules
+
 while read; do
+	valid_string_flag=0
 	[[ "$REPLY" =~ ^[[:space:]]*(#|$) ]] && continue
 	definition_sid
 	if [[ "$?" != '0' ]]; then
-		echo "Error - double sid:$sid" >> err.txt
+		echo "Error - double sid:$sid"
 		continue
+	else
+		((valid_string_flag++))
 	fi
 	cut_field "$REPLY"
 	field_enumeration
 	if [[ "$?" != '0' ]]; then
-		echo "Error sid:$sid" >> err.txt
+		echo "Error sid:$sid"
+	else
+		((valid_string_flag++))
 	fi
+	if [[ $valid_string_flag == '2' ]]; then
+		echo "$REPLY" >> ../rules/checked/valid_rules.rules
+	fi
+
 done < $FILE_RULES
-cat err.txt
