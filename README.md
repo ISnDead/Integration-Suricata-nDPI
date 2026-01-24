@@ -182,3 +182,22 @@ Disable nDPI:
 
 Enabling/disabling the plugin is a restart-level change and may briefly interrupt traffic inspection during Suricata restart.
 Reload operations (suricatasc, ExecReload) are suitable for reloadable changes (rules/config updates) but are not reliable for dynamic plugin (un)loading.
+
+```
+Как деплоить это на хост (команды) - переписать допишу 
+
+Допустим, бинарь host-agent уже установлен в /usr/local/bin/host-agent, а конфиг — /etc/integration-suricata-ndpi/config.yaml.
+
+# 1) положить units
+sudo install -D -m 0644 deploy/systemd/ndpi-agent.socket /etc/systemd/system/ndpi-agent.socket
+sudo install -D -m 0644 deploy/systemd/ndpi-agent.service /etc/systemd/system/ndpi-agent.service
+
+# 2) перечитать systemd
+sudo systemctl daemon-reload
+
+# 3) включить сокет (важно!)
+sudo systemctl enable --now ndpi-agent.socket
+
+# если вариант A (always on), то еще:
+sudo systemctl enable --now ndpi-agent.service
+```
