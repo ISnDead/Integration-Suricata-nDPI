@@ -91,3 +91,4 @@ while read; do
 		echo "Error sid:$sid" >> err.txt
 	fi
 done < $FILE_RULES
+cat err.txt
