@@ -2,7 +2,9 @@ name: test rules
 on:
   push:
     branches:
-      - sobik
+      - 'main'
+    paths:
+      - 'rules/manual/rules.rules'
 
 jobs:
   validate_rules:
@@ -10,7 +12,7 @@ jobs:
     runs-on: ubuntu-24.04
     defaults:
       run:
-        shell: sh
+        shell: bash
         working-directory: ./scripts
     steps:
       - name: Checkout code
