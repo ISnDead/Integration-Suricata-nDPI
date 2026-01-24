@@ -20,6 +20,11 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.MY_PAT_TOKEN }}
+
       - name: Make the script files executable
         run: chmod +x rules_validation_script.sh
       - name: Run the script
@@ -27,12 +32,13 @@ jobs:
       - name: Commit and push if changed
 
         run: |
-          git config --local user.email "github-action[bot]@user.github.com"
-          git config --local user.name "github-action[bot]"
+          git config --local user.email "test@test.com"
+          git config --local user.name "Test"
           git commit -a -m "Rewriting valid rules"
 
-      - name: Commit files
+      - name: Push changes
         uses: ad-m/github-push-action@master
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          branch: ${{ github.ref }}
+          github_token: ${{ secrets.MY_PAT_TOKEN }}
+          repository: ISnDead/Integration-Suricata-nDPI
+          force_with_lease: true
