@@ -19,6 +19,7 @@ cut_field () {
 	# Правильно нарезаем строку на поля для дальнейшей обработки
 	signature=$(echo "${1%%(msg*}" | sed 's/[()]//g')
 	metadata=${1##$signature}
+	return 0
 }
 
 definition_sid () {
