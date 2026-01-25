@@ -183,21 +183,87 @@ Disable nDPI:
 Enabling/disabling the plugin is a restart-level change and may briefly interrupt traffic inspection during Suricata restart.
 Reload operations (suricatasc, ExecReload) are suitable for reloadable changes (rules/config updates) but are not reliable for dynamic plugin (un)loading.
 
+## Host Agent deployment (systemd)
+
+> Assumption: host-agent is installed at /usr/local/bin/host-agent, and config is at /etc/integration-suricata-ndpi/config.yaml.
+
+Install unit files
 ```
-Как деплоить это на хост (команды) - переписать допишу 
-
-Допустим, бинарь host-agent уже установлен в /usr/local/bin/host-agent, а конфиг — /etc/integration-suricata-ndpi/config.yaml.
-
-# 1) положить units
-sudo install -D -m 0644 deploy/systemd/ndpi-agent.socket /etc/systemd/system/ndpi-agent.socket
+sudo install -D -m 0644 deploy/systemd/ndpi-agent.socket  /etc/systemd/system/ndpi-agent.socket
 sudo install -D -m 0644 deploy/systemd/ndpi-agent.service /etc/systemd/system/ndpi-agent.service
+```
 
-# 2) перечитать systemd
+Reload systemd and start socket activation
+```
 sudo systemctl daemon-reload
-
-# 3) включить сокет (важно!)
 sudo systemctl enable --now ndpi-agent.socket
-
-# если вариант A (always on), то еще:
+```
+Optional: “always-on” mode (run service even without incoming requests)
+```
 sudo systemctl enable --now ndpi-agent.service
 ```
+Update binary
+```
+sudo systemctl stop ndpi-agent.service ndpi-agent.socket
+sudo install -m 0755 bin/host-agent /usr/local/bin/host-agent
+sudo systemctl start ndpi-agent.socket
+```
+
+## Host Agent API (Unix socket)
+
+Default socket: /run/ndpi-agent.sock
+
+### Liveness
+  - `sudo curl --unix-socket /run/ndpi-agent.sock http://localhost/health`
+
+### Ensure Suricata control socket is reachable (and restart Suricata if needed)
+- `sudo curl -X POST --unix-socket /run/ndpi-agent.sock http://localhost/suricata/ensure`
+
+### nDPI status / enable / disable
+
+status: `sudo curl --unix-socket /run/ndpi-agent.sock http://localhost/ndpi/status`
+enable: `sudo curl -X POST --unix-socket /run/ndpi-agent.sock http://localhost/ndpi/enable`
+disable: `sudo curl -X POST --unix-socket /run/ndpi-agent.sock http://localhost/ndpi/disable`
+
+
+## Integration service API (TCP)
+
+Default listen: http.addr (example :8080)
+
+### Health (GET only)
+  - `curl http://localhost:8080/health`
+
+### nDPI toggle via integration (delegates to host-agent over Unix socket)
+```
+curl http://localhost:8080/ndpi/status
+curl -X POST http://localhost:8080/ndpi/enable
+curl -X POST http://localhost:8080/ndpi/disable
+```
+
+## Operational commands (system)
+### Check service/socket state
+```
+sudo systemctl status ndpi-agent.socket
+sudo systemctl status ndpi-agent.service
+```
+
+## Requirements
+
+  - Suricata installed and managed by systemd (service name: system.suricata_service, usually suricata)
+  - Suricata control socket available (one of suricata.socket_candidates, example /run/suricata/suricata-command.socket)
+  - Host agent installed: /usr/local/bin/host-agent
+  - Host agent config present: /etc/integration-suricata-ndpi/config.yaml
+  - nDPI plugin file exists on host: paths.ndpi_plugin_path (example /usr/local/lib/suricata/ndpi.so)
+  - Permission to restart Suricata via systemctl (host-agent runs as root via systemd unit)
+
+What is enabled / included
+
+Socket activation via ndpi-agent.socket (recommended default): host-agent starts on first request to /run/ndpi-agent.sock.
+
+Host-agent endpoints:
+
+  - /health (GET)
+  - /suricata/ensure (POST)
+  - /ndpi/status (GET)
+  - /ndpi/enable (POST)
+  - /ndpi/disable (POST)
