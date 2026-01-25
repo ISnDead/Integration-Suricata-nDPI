@@ -1,1 +1,2 @@
-Hello
+alert http any any -> $EXTERNAL_NET any (msg:"HTTP GET Request Containing Rule in URI"; flow:established,to_server; http.method; content:"GET"; http.uri; content:"rule"; fast_pattern; classtype:bad-unknown; sid:123; requires:; metadata:mitre_technique_id T1119; ndpi-protocol:; rev:1;)
+alert http any any -> any any (msg:"Yandex"; requires:keyword ndpi-protocol; ndpi-protocol:Yandex; sid:100009; metadata:mitre_technique_id T1111;)
