@@ -1,6 +1,7 @@
 package wire
 
 import (
+	"strings"
 	"time"
 
 	"integration-suricata-ndpi/integration"
@@ -8,6 +9,7 @@ import (
 	"integration-suricata-ndpi/internal/config"
 	"integration-suricata-ndpi/pkg/fsutil"
 	"integration-suricata-ndpi/pkg/hostagent"
+	"integration-suricata-ndpi/pkg/logger"
 	"integration-suricata-ndpi/pkg/systemd"
 )
 
@@ -26,11 +28,28 @@ func newIntegrationService(configPath string) (app.Service, error) {
 	return integration.NewRunner(configPath, nil, fsutil.OSFS{}), nil
 }
 
+func firstNonEmpty(v []string) string {
+	for _, s := range v {
+		if strings.TrimSpace(s) != "" {
+			return s
+		}
+	}
+	return ""
+}
+
 func newHostAgentService(opts HostAgentOptions) (app.Service, error) {
 	cfg, err := config.Load(opts.ConfigPath)
 	if err != nil {
 		return nil, err
 	}
+
+	logger.Infow("Host-agent config loaded",
+		"config_path", opts.ConfigPath,
+		"socket_candidates", cfg.Suricata.SocketCandidates,
+		"config_candidates", cfg.Suricata.ConfigCandidates,
+		"systemctl", cfg.System.Systemctl,
+		"suricata_service", cfg.System.SuricataService,
+	)
 
 	suricataCfgPath := opts.SuricataConfig
 	if suricataCfgPath == "" {
@@ -57,14 +76,20 @@ func newHostAgentService(opts HostAgentOptions) (app.Service, error) {
 	}
 
 	deps := hostagent.Deps{
-		SocketPath:      opts.SocketPath,
+		SocketPath:    firstNonEmpty([]string{opts.SocketPath, cfg.HTTP.HostAgentSocket}),
+		SystemctlPath: systemctlPath,
+		SuricataUnit:  unit,
+
+		SuricataSocketCandidates: append([]string(nil), cfg.Suricata.SocketCandidates...),
+
 		SuricataCfgPath: suricataCfgPath,
 		NDPIPluginPath:  ndpiPluginPath,
-		SuricataUnit:    unit,
-		RestartTimeout:  opts.RestartTimeout,
-		SystemctlPath:   systemctlPath,
-		Systemd:         systemd.NewManager(systemctlPath, nil),
-		FS:              fsutil.OSFS{},
+
+		RestartTimeout:         opts.RestartTimeout,
+		SuricataConnectTimeout: 300 * time.Millisecond,
+
+		FS:      fsutil.OSFS{},
+		Systemd: systemd.NewManager(systemctlPath, nil),
 	}
 
 	return hostagent.New(deps)

@@ -2,6 +2,7 @@ package integration
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
@@ -33,6 +34,19 @@ func (r *Runner) handlePlan(w http.ResponseWriter, req *http.Request) {
 	writeJSON(w, http.StatusOK, report)
 }
 
+func writeErrPublic(w http.ResponseWriter, code string, status int, err error) {
+	logger.Errorw("host-agent request failed", "code", code, "status", status, "error", err)
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(status)
+
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":      false,
+		"code":    code,
+		"message": err.Error(),
+	})
+}
+
 func (r *Runner) handleApply(w http.ResponseWriter, req *http.Request) {
 	if !requireMethod(w, req, http.MethodPost) {
 		return
@@ -40,6 +54,13 @@ func (r *Runner) handleApply(w http.ResponseWriter, req *http.Request) {
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
+	// перед apply можно сделать ensure suricata (чтобы потом reload/сокет работали)
+	if err := r.ensureSuricataViaHostAgent(req.Context()); err != nil {
+		logger.Errorw("HTTP apply: suricata ensure failed", "error", err)
+		writeJSONError(w, http.StatusBadGateway, err.Error())
+		return
+	}
 
 	report, err := ApplyConfig(r.opts.Apply)
 	if err != nil {
@@ -53,9 +74,6 @@ func (r *Runner) handleNDPIEnable(w http.ResponseWriter, req *http.Request) {
 	if !requireMethod(w, req, http.MethodPost) {
 		return
 	}
-
-	logger.Infow("HTTP ndpi enable: request received", "remote", req.RemoteAddr)
-
 	resp, err := r.callHostAgent(req.Context(), true)
 	if err != nil {
 		logger.Errorw("HTTP ndpi enable: host-agent call failed", "error", err)
@@ -66,10 +84,8 @@ func (r *Runner) handleNDPIEnable(w http.ResponseWriter, req *http.Request) {
 	logger.Infow("HTTP ndpi enable: done",
 		"ok", resp.OK,
 		"changed", resp.Changed,
-		"enabled", resp.Enabled,
 		"message", resp.Message,
 	)
-
 	writeJSON(w, http.StatusOK, resp)
 }
 
@@ -77,9 +93,6 @@ func (r *Runner) handleNDPIDisable(w http.ResponseWriter, req *http.Request) {
 	if !requireMethod(w, req, http.MethodPost) {
 		return
 	}
-
-	logger.Infow("HTTP ndpi disable: request received", "remote", req.RemoteAddr)
-
 	resp, err := r.callHostAgent(req.Context(), false)
 	if err != nil {
 		logger.Errorw("HTTP ndpi disable: host-agent call failed", "error", err)
@@ -90,10 +103,8 @@ func (r *Runner) handleNDPIDisable(w http.ResponseWriter, req *http.Request) {
 	logger.Infow("HTTP ndpi disable: done",
 		"ok", resp.OK,
 		"changed", resp.Changed,
-		"enabled", resp.Enabled,
 		"message", resp.Message,
 	)
-
 	writeJSON(w, http.StatusOK, resp)
 }
 
@@ -112,46 +123,42 @@ func (r *Runner) callHostAgent(ctx context.Context, enable bool) (*agentclient.T
 		timeout = 10 * time.Second
 	}
 
-	action := "disable"
+	client := agentclient.New(socket, timeout)
+
 	if enable {
-		action = "enable"
+		return client.EnableNDPI(ctx)
+	}
+	return client.DisableNDPI(ctx)
+}
+
+func (r *Runner) ensureSuricataViaHostAgent(ctx context.Context) error {
+	if r.cfg == nil {
+		return fmt.Errorf("config is not loaded")
 	}
 
-	logger.Infow("Calling host-agent",
-		"action", action,
-		"socket", socket,
-		"timeout", timeout,
-	)
+	socket := r.cfg.HTTP.HostAgentSocket
+	if socket == "" {
+		return fmt.Errorf("http.host_agent_socket is empty")
+	}
+
+	timeout := r.cfg.HTTP.HostAgentTimeout
+	if timeout <= 0 {
+		timeout = 10 * time.Second
+	}
 
 	client := agentclient.New(socket, timeout)
 
-	var (
-		resp *agentclient.ToggleResponse
-		err  error
-	)
-
-	if enable {
-		resp, err = client.EnableNDPI(ctx)
-	} else {
-		resp, err = client.DisableNDPI(ctx)
-	}
-
+	resp, err := client.EnsureSuricataStarted(ctx)
 	if err != nil {
-		logger.Errorw("Host-agent request failed",
-			"action", action,
-			"socket", socket,
-			"error", err,
-		)
-		return nil, err
+		return err
+	}
+	if !resp.OK {
+		return fmt.Errorf("host-agent ensure suricata failed: %s (%s)", resp.Message, resp.Code)
 	}
 
-	logger.Infow("Host-agent response received",
-		"action", action,
-		"ok", resp.OK,
-		"changed", resp.Changed,
-		"enabled", resp.Enabled,
-		"message", resp.Message,
+	logger.Infow("Suricata ensured via host-agent",
+		"started", resp.Started,
+		"socket", resp.Socket,
 	)
-
-	return resp, nil
+	return nil
 }

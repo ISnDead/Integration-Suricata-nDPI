@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"net/http"
 	"strings"
+	"time"
 
 	"integration-suricata-ndpi/integration"
 	"integration-suricata-ndpi/pkg/logger"
@@ -23,6 +24,60 @@ func NewHandlers(deps Deps) *Handlers {
 func (h *Handlers) Health(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte("ok\n"))
+}
+
+type suricataEnsureResp struct {
+	OK      bool   `json:"ok"`
+	Started bool   `json:"started"`
+	Socket  string `json:"socket,omitempty"`
+	Code    string `json:"code,omitempty"`
+	Message string `json:"message,omitempty"`
+}
+
+func (h *Handlers) SuricataEnsure(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeErrPublic(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "method not allowed", nil)
+		return
+	}
+
+	client, err := integration.ConnectSuricata(h.deps.SuricataSocketCandidates, h.deps.SuricataConnectTimeout)
+	if err == nil {
+		_ = client.Conn.Close()
+		writeJSONWithStatus(w, http.StatusOK, suricataEnsureResp{
+			OK:      true,
+			Started: false,
+			Socket:  client.Path,
+			Message: "already running",
+		})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), h.deps.RestartTimeout)
+	defer cancel()
+
+	if err := h.deps.Systemd.Restart(ctx, h.deps.SuricataUnit, h.deps.RestartTimeout); err != nil {
+		writeErrPublic(w, http.StatusInternalServerError, "SURICATA_RESTART_FAILED", "failed to restart suricata", err)
+		return
+	}
+
+	deadline := time.Now().Add(h.deps.RestartTimeout)
+	for time.Now().Before(deadline) {
+		client, err := integration.ConnectSuricata(h.deps.SuricataSocketCandidates, h.deps.SuricataConnectTimeout)
+		if err == nil {
+			_ = client.Conn.Close()
+			logger.Infow("Suricata ensured", "started", true, "socket", client.Path)
+			writeJSONWithStatus(w, http.StatusOK, suricataEnsureResp{
+				OK:      true,
+				Started: true,
+				Socket:  client.Path,
+				Message: "started",
+			})
+			return
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+
+	writeErrPublic(w, http.StatusGatewayTimeout, "SURICATA_NOT_READY", "suricata restarted but socket not reachable", err)
 }
 
 type ndpiStatusResp struct {
@@ -57,7 +112,7 @@ func (h *Handlers) NDPIStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, ndpiStatusResp{OK: true, Enabled: enabled, Line: line})
+	writeJSONWithStatus(w, http.StatusOK, ndpiStatusResp{OK: true, Enabled: enabled, Line: line})
 }
 
 func (h *Handlers) NDPIEnable(w http.ResponseWriter, r *http.Request) {
@@ -88,7 +143,7 @@ func (h *Handlers) NDPIEnable(w http.ResponseWriter, r *http.Request) {
 	}
 
 	logger.Infow("NDPI enabled", "changed", changed)
-	writeJSON(w, toggleResp{
+	writeJSONWithStatus(w, http.StatusOK, toggleResp{
 		OK:      true,
 		Changed: changed,
 		Enabled: enabledAfter,
@@ -124,7 +179,7 @@ func (h *Handlers) NDPIDisable(w http.ResponseWriter, r *http.Request) {
 	}
 
 	logger.Infow("NDPI disabled", "changed", changed)
-	writeJSON(w, toggleResp{
+	writeJSONWithStatus(w, http.StatusOK, toggleResp{
 		OK:      true,
 		Changed: changed,
 		Enabled: enabledAfter,
@@ -167,10 +222,6 @@ func classifyErr(err error) (status int, code, msg string) {
 	}
 
 	return http.StatusInternalServerError, "INTERNAL", "internal error"
-}
-
-func writeJSON(w http.ResponseWriter, v any) {
-	writeJSONWithStatus(w, http.StatusOK, v)
 }
 
 func writeJSONWithStatus(w http.ResponseWriter, status int, v any) {

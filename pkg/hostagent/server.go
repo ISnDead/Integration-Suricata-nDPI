@@ -18,10 +18,9 @@ import (
 )
 
 type Server struct {
-	deps       Deps
-	ln         net.Listener
-	server     *http.Server
-	ownsSocket bool
+	deps   Deps
+	ln     net.Listener
+	server *http.Server
 }
 
 func New(deps Deps) (*Server, error) {
@@ -37,9 +36,14 @@ func New(deps Deps) (*Server, error) {
 	if deps.SuricataUnit == "" {
 		return nil, fmt.Errorf("suricata unit is empty")
 	}
+
 	if deps.RestartTimeout <= 0 {
 		deps.RestartTimeout = 20 * time.Second
 	}
+	if deps.SuricataConnectTimeout <= 0 {
+		deps.SuricataConnectTimeout = 300 * time.Millisecond
+	}
+
 	if deps.Systemd == nil {
 		deps.Systemd = systemd.NewManager(deps.SystemctlPath, nil)
 	}
@@ -56,6 +60,9 @@ func New(deps Deps) (*Server, error) {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", h.Health)
+
+	mux.HandleFunc("/suricata/ensure", h.SuricataEnsure)
+
 	mux.HandleFunc("/ndpi/status", h.NDPIStatus)
 	mux.HandleFunc("/ndpi/enable", h.NDPIEnable)
 	mux.HandleFunc("/ndpi/disable", h.NDPIDisable)
@@ -64,15 +71,18 @@ func New(deps Deps) (*Server, error) {
 		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       5 * time.Second,
-		WriteTimeout:      10 * time.Second,
+		WriteTimeout:      45 * time.Second,
 		IdleTimeout:       30 * time.Second,
 	}
 
+	if usingActivation {
+		logger.Infow("Host-agent uses systemd socket activation", "socket", deps.SocketPath)
+	}
+
 	return &Server{
-		deps:       deps,
-		ln:         ln,
-		server:     s,
-		ownsSocket: !usingActivation,
+		deps:   deps,
+		ln:     ln,
+		server: s,
 	}, nil
 }
 
@@ -96,17 +106,12 @@ func getListener(socketPath string) (net.Listener, bool, error) {
 }
 
 func (s *Server) Start(ctx context.Context) error {
-	mode := "standalone (net.Listen unix)"
-	if !s.ownsSocket {
-		mode = "systemd socket-activation"
-	}
-
 	logger.Infow("Host agent started",
-		"mode", mode,
 		"socket", s.deps.SocketPath,
 		"unit", s.deps.SuricataUnit,
 		"suricata_config", s.deps.SuricataCfgPath,
 		"ndpi_plugin", s.deps.NDPIPluginPath,
+		"suricata_socket_candidates", s.deps.SuricataSocketCandidates,
 	)
 
 	errCh := make(chan error, 1)
@@ -134,12 +139,6 @@ func (s *Server) Stop(ctx context.Context) error {
 
 	if s.ln != nil {
 		_ = s.ln.Close()
-	}
-
-	if s.ownsSocket {
-		if rmErr := removeIfSocket(s.deps.SocketPath); rmErr != nil {
-			logger.Warnw("Failed to remove socket path", "path", s.deps.SocketPath, "error", rmErr)
-		}
 	}
 
 	return err

@@ -12,10 +12,15 @@ type SystemdManager interface {
 }
 
 type Deps struct {
-	SocketPath      string
+	SocketPath string
+
 	SuricataCfgPath string
 	NDPIPluginPath  string
-	SuricataUnit    string
+
+	SuricataUnit string
+
+	SuricataSocketCandidates []string
+	SuricataConnectTimeout   time.Duration
 
 	RestartTimeout time.Duration
 	SystemctlPath  string
