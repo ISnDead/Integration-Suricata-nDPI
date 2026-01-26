@@ -148,6 +148,10 @@ func uncommentBlock(lines []string, start int, baseIndent int) ([]string, bool, 
 
 func ensurePluginsNDPI(lines []string, pluginsIndent int, ndpiLine string) ([]string, bool, error) {
 	keyLine := "plugins:"
+	ndpiLine = strings.TrimSpace(ndpiLine)
+	if !strings.HasPrefix(strings.TrimSpace(ndpiLine), "-") {
+		ndpiLine = "- " + ndpiLine
+	}
 	for i, line := range lines {
 		if normalizeKey(line) != keyLine {
 			continue
@@ -182,15 +186,15 @@ func ensurePluginsNDPI(lines []string, pluginsIndent int, ndpiLine string) ([]st
 
 		if !found {
 			indent := strings.Repeat(" ", pluginsIndent+2)
-			lineToInsert := strings.TrimSpace(ndpiLine)
-			if !strings.HasPrefix(strings.TrimSpace(lineToInsert), "-") {
-				lineToInsert = "- " + lineToInsert
-			}
-			lines = append(lines[:insertAt], append([]string{indent + strings.TrimSpace(lineToInsert)}, lines[insertAt:]...)...)
+			lines = append(lines[:insertAt], append([]string{indent + ndpiLine}, lines[insertAt:]...)...)
 			changed = true
 		}
 		return lines, changed, nil
 	}
 
-	return nil, false, fmt.Errorf("plugins block not found in current config")
+	if len(lines) > 0 && lines[len(lines)-1] != "" {
+		lines = append(lines, "")
+	}
+	lines = append(lines, "plugins:", "  "+ndpiLine)
+	return lines, true, nil
 }

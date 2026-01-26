@@ -36,7 +36,16 @@ func setupTemplateAndConfig(t *testing.T, dir string) (string, string) {
 	tpl := filepath.Join(dir, "suricata.yaml.tpl")
 	cfg := filepath.Join(dir, "suricata.yaml")
 
-	writeFile(t, tpl, "newcfg\n", 0o644)
+	templateBody := `
+plugins:
+  - /usr/local/lib/suricata/ndpi.so
+
+unix-command:
+  enabled: yes
+  filename: /run/suricata/suricata-command.socket
+  mode: 0660
+`
+	writeFile(t, tpl, templateBody, 0o644)
 	writeFile(t, cfg, "oldcfg\n", 0o644)
 
 	return tpl, cfg

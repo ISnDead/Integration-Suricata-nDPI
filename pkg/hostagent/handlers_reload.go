@@ -77,5 +77,11 @@ func (h *Handlers) SuricataReload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	writeErrPublic(w, http.StatusInternalServerError, "RELOAD_FAILED", "suricatasc reload failed", runErr)
+	writeErrPublic(
+		w,
+		http.StatusInternalServerError,
+		"RELOAD_FAILED",
+		"suricatasc reload failed: "+strings.TrimSpace(output),
+		runErr,
+	)
 }
