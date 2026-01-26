@@ -3,7 +3,6 @@ package hostagent
 import (
 	"context"
 	"net/http"
-	"os/exec"
 	"strings"
 	"time"
 
@@ -49,20 +48,34 @@ func (h *Handlers) SuricataReload(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, h.deps.SuricataSCPath, "-c", cmdName, socketPath)
-	out, runErr := cmd.CombinedOutput()
-	output := strings.TrimSpace(string(out))
-
-	if runErr != nil {
-		writeErrPublic(w, http.StatusInternalServerError, "RELOAD_FAILED", "suricatasc reload failed", runErr)
+	if err := waitSuricataReady(ctx, h.deps.SuricataSCPath, socketPath, 3*time.Second); err != nil {
+		writeErrPublic(w, http.StatusGatewayTimeout, "SURICATA_NOT_READY", "suricata not ready (uptime check failed)", err)
 		return
 	}
 
-	writeJSONWithStatus(w, http.StatusOK, suricataReloadResp{
-		OK:      true,
-		Socket:  socketPath,
-		Command: cmdName,
-		Output:  output,
-		Message: "ok",
-	})
+	attempts := 5
+	var (
+		output string
+		runErr error
+	)
+	for i := 0; i < attempts; i++ {
+		output, runErr = runSuricataSC(ctx, h.deps.SuricataSCPath, cmdName, socketPath)
+		if runErr == nil {
+			writeJSONWithStatus(w, http.StatusOK, suricataReloadResp{
+				OK:      true,
+				Socket:  socketPath,
+				Command: cmdName,
+				Output:  output,
+				Message: "ok",
+			})
+			return
+		}
+		select {
+		case <-ctx.Done():
+			break
+		case <-time.After(250 * time.Millisecond):
+		}
+	}
+
+	writeErrPublic(w, http.StatusInternalServerError, "RELOAD_FAILED", "suricatasc reload failed", runErr)
 }

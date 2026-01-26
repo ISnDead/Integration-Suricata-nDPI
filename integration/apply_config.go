@@ -75,15 +75,29 @@ func ApplyConfigWithContext(ctx context.Context, opts ApplyConfigOptions) (Apply
 	}
 	report.TargetConfigPath = targetConfigPath
 
+	currentConfig, err := fs.ReadFile(targetConfigPath)
+	if err != nil {
+		return report, fmt.Errorf("failed to read current config %s: %w", targetConfigPath, err)
+	}
+
+	updatedConfig, changed, err := PatchSuricataConfigFromTemplate(tmplData, currentConfig)
+	if err != nil {
+		return report, fmt.Errorf("failed to patch config %s: %w", targetConfigPath, err)
+	}
+
 	perm := os.FileMode(0o644)
 	if st, statErr := fs.Stat(targetConfigPath); statErr == nil {
 		perm = st.Mode().Perm()
 	}
 
-	if err := writeFileAtomic(targetConfigPath, tmplData, perm, fs); err != nil {
-		return report, fmt.Errorf("failed to write config %s: %w", targetConfigPath, err)
+	if changed {
+		if err := writeFileAtomic(targetConfigPath, updatedConfig, perm, fs); err != nil {
+			return report, fmt.Errorf("failed to write config %s: %w", targetConfigPath, err)
+		}
+		logger.Infow("Suricata config updated", "path", targetConfigPath)
+	} else {
+		logger.Infow("Suricata config already contains required settings", "path", targetConfigPath)
 	}
-	logger.Infow("Suricata config updated", "path", targetConfigPath)
 
 	if cmdNormalized == "" || cmdNormalized == "none" {
 		report.ReloadStatus = ReloadOK
