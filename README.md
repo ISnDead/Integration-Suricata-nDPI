@@ -234,6 +234,24 @@ Default socket: `/run/ndpi-agent.sock`
 
 - `sudo curl -X POST --unix-socket /run/ndpi-agent.sock http://localhost/suricata/ensure`
 
+## Quick verification
+
+### Host Agent (Unix socket)
+
+```bash
+sudo curl -sS --unix-socket /run/ndpi-agent.sock http://localhost/health
+sudo curl -sS -X POST --unix-socket /run/ndpi-agent.sock http://localhost/suricata/ensure
+sudo curl -sS --unix-socket /run/ndpi-agent.sock http://localhost/ndpi/status
+```
+
+### Integration service (TCP)
+
+```bash
+curl -sS http://localhost:8080/health
+curl -sS http://localhost:8080/plan
+curl -sS -X POST http://localhost:8080/apply
+```
+
 ### nDPI status / enable / disable
 
 - status: `sudo curl --unix-socket /run/ndpi-agent.sock http://localhost/ndpi/status`
@@ -287,3 +305,19 @@ Host-agent endpoints:
 - `/ndpi/status` (GET)
 - `/ndpi/enable` (POST)
 - `/ndpi/disable` (POST)
+
+## Rules update (no Suricata restart)
+
+Suricata rules can be reloaded without restarting the Suricata process using `suricatasc reload-rules`.
+
+### Manual reload (recommended for debugging)
+
+```bash
+sudo /usr/local/bin/suricatasc -c reload-rules /run/suricata/suricata-command.socket
+```
+
+### Reload via Host Agent
+
+```bash
+sudo curl -sS -X POST --unix-socket /run/ndpi-agent.sock http://localhost/suricata/reload
+```
