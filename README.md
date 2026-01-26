@@ -38,12 +38,12 @@ sudo ./bin/host-agent serve --config config/config.yaml --sock /run/ndpi-agent.s
 
 ### Minimally important fields
 
-- `paths.ndpi_rules_local` — local nDPI rules directory.
-- `paths.suricata_template` — `suricata.yaml.tpl` template.
-- `paths.suricatasc` — path to `suricatasc`.
-- `suricata.socket_candidates` — Unix-socket path candidates.
-- `suricata.config_candidates` — `suricata.yaml` path candidates.
-- `reload.command`, `reload.timeout` — best-effort reload/reconfigure parameters.
+- `paths.ndpi_rules_local` - local nDPI rules directory.
+- `paths.suricata_template` - `suricata.yaml.tpl` template.
+- `paths.suricatasc` - path to `suricatasc`.
+- `suricata.socket_candidates` - Unix-socket path candidates.
+- `suricata.config_candidates` - `suricata.yaml` path candidates.
+- `reload.command`, `reload.timeout` - best-effort reload/reconfigure parameters.
 
 ## Installing Suricata 8.0.x with nDPI 4.14 (Debian/Ubuntu)
 
@@ -165,11 +165,11 @@ In typical deployments, the integration service runs in a container, while Suric
 
 The Host Agent exposes a small HTTP API over a Unix socket:
 
-- `GET /health` — liveness probe.
-- `POST /suricata/ensure` — ensures Suricata is running and the control socket is reachable.
-- `GET /ndpi/status` — returns current desired state based on config contents.
-- `POST /ndpi/enable` — enables the nDPI plugin and restarts Suricata.
-- `POST /ndpi/disable` — disables the nDPI plugin and restarts Suricata.
+- `GET /health` - liveness probe.
+- `POST /suricata/ensure` - ensures Suricata is running and the control socket is reachable.
+- `GET /ndpi/status` - returns current desired state based on config contents.
+- `POST /ndpi/enable` - enables the nDPI plugin and restarts Suricata.
+- `POST /ndpi/disable` - disables the nDPI plugin and restarts Suricata.
 
 ### Example usage
 
