@@ -49,7 +49,7 @@ func (h *Handlers) SuricataReload(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, h.deps.SuricataSCPath, "-c", socketPath, cmdName)
+	cmd := exec.CommandContext(ctx, h.deps.SuricataSCPath, "-c", cmdName, socketPath)
 	out, runErr := cmd.CombinedOutput()
 	output := strings.TrimSpace(string(out))
 

@@ -201,7 +201,7 @@ legacy:
   uricontent: enabled
 
 ##
-## Detection / performance (разумный минимум)
+## Detection / performance
 ##
 
 exception-policy: auto

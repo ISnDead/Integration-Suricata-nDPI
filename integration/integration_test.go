@@ -149,7 +149,7 @@ func TestApplyConfig_ReloadFailed_AndSocketDown_ReturnsError(t *testing.T) {
 
 	tpl, cfg := setupTemplateAndConfig(t, dir)
 
-	sock := filepath.Join(dir, "suricata-command.socket") // listener не поднимаем
+	sock := filepath.Join(dir, "suricata-command.socket")
 	suricatasc := writeExecutable(t, dir, "suricatasc", "#!/bin/sh\necho FAIL\nexit 1\n")
 
 	_, err := ApplyConfig(ApplyConfigOptions{
