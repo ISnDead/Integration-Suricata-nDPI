@@ -1,19 +1,42 @@
 # Integration Suricata + nDPI
 
-Integration Suricata + nDPI automates configuration management for Suricata deployments that use the nDPI plugin.
+Integration Suricata + nDPI automates configuration management for Suricata
+deployments that use the nDPI plugin. It provides a host-side agent (Unix
+socket HTTP API) to enable/disable the plugin safely and an integration
+service for reloadable updates without downtime.
 
-## Key capabilities
+## Overview
 
-- Generates `suricata.yaml` from a template (with environment variable rendering) and writes it atomically to prevent partial/invalid config updates.
-- Applies reloadable Suricata changes using best-effort `suricatasc` reload/reconfigure, avoiding service downtime when restart is not required.
-- Validates local resources and nDPI-related inputs (plugin `ndpi.so`, rules directory, template integrity, `suricatasc` binary) before applying changes.
-- Verifies Suricata availability via the Unix control socket (selecting a working socket candidate, not just an existing path).
-- Provides a host-side agent API over a Unix socket to enable/disable the nDPI plugin by editing the active Suricata config and restarting Suricata via systemd only when a state change is needed.
+This repository contains:
 
-## Important note about nDPI plugin activation
+- **Integration service**: validates local inputs, renders and writes
+  `suricata.yaml` atomically, and issues reload/reconfigure via `suricatasc`
+  when possible.
+- **Host Agent**: runs on the Suricata host, edits the active Suricata config
+  to enable/disable the nDPI plugin, and restarts Suricata via systemd only
+  when necessary.
 
-- nDPI plugin activation requires a Suricata process restart.
-- The integration service itself does **not** restart Suricata to toggle the plugin. It only performs reloadable updates. Plugin enable/disable is delegated to the Host Agent.
+## Requirements
+
+- Go 1.21+.
+- Suricata installed and managed by systemd (service name: usually
+  `suricata`, configure via `system.suricata_service`).
+- Suricata control socket available (one of `suricata.socket_candidates`,
+  e.g. `/run/suricata/suricata-command.socket`).
+- Host Agent installed on the host (recommended `/usr/local/bin/host-agent`).
+- Host Agent config present (recommended
+  `/etc/integration-suricata-ndpi/config.yaml`).
+- nDPI plugin file exists on host (`paths.ndpi_plugin_path`, e.g.
+  `/usr/local/lib/suricata/ndpi.so`).
+- Permission to restart Suricata via systemctl (Host Agent runs as root).
+
+### Supported versions
+
+- Suricata 8.0.x (built with `--enable-ndpi`).
+- nDPI 4.14.
+
+> **Note**: Package-manager installs may ship non‑nDPI builds. Prefer a stable
+> source tarball and an explicit configure step.
 
 ## Quick Start
 
@@ -31,28 +54,30 @@ sudo ./bin/integration run --config config/config.yaml
 sudo ./bin/host-agent serve --config config/config.yaml --sock /run/ndpi-agent.sock
 ```
 
-### Configuration
+## Configuration
 
-- The configuration is defined by a YAML file (example: `config/config.yaml`).
-- The Suricata template is stored in `config/suricata.yaml.tpl`.
+- Main config: `config/config.yaml`.
+- Suricata template: `config/suricata.yaml.tpl`.
 
-### Minimally important fields
+### Minimal required fields
 
 - `paths.ndpi_rules_local` - local nDPI rules directory.
 - `paths.suricata_template` - `suricata.yaml.tpl` template.
 - `paths.suricatasc` - path to `suricatasc`.
 - `suricata.socket_candidates` - Unix-socket path candidates.
 - `suricata.config_candidates` - `suricata.yaml` path candidates.
-- `reload.command`, `reload.timeout` - best-effort reload/reconfigure parameters.
+- `reload.command`, `reload.timeout` - reload/reconfigure parameters.
+
+> **NEEDS CLARIFICATION**: provide a full example config and document all
+> optional fields (timeouts, HTTP listen address, systemd paths).
+
+## nDPI plugin activation notes
+
+- nDPI plugin activation requires a Suricata process restart.
+- The integration service does **not** restart Suricata to toggle the plugin.
+  Enable/disable is delegated to the Host Agent.
 
 ## Installing Suricata 8.0.x with nDPI 4.14 (Debian/Ubuntu)
-
-This project assumes:
-
-- Suricata 8.0.x built with nDPI support (`--enable-ndpi`).
-- nDPI 4.14 installed on the host.
-
-> Note: Package-manager installs (for example `apt install suricata`) may provide development or non‑nDPI builds. Prefer a stable source tarball and an explicit configure step.
 
 ### 1. Install build dependencies
 
@@ -76,8 +101,7 @@ mkdir -p ~/src && cd ~/src
 git clone https://github.com/ntop/nDPI.git
 cd nDPI
 
-# Checkout a tested release
-git checkout ndpi-4.14   # adjust to the exact tag you use
+git checkout ndpi-4.14
 
 ./autogen.sh
 ./configure --with-only-libndpi
@@ -86,7 +110,8 @@ sudo make install
 sudo ldconfig
 ```
 
-This installs the nDPI library into the default system paths (for example `/usr/local/lib`, `/usr/local/include`).
+This installs the nDPI library into default system paths (for example
+`/usr/local/lib`, `/usr/local/include`).
 
 ### 3. Download and build Suricata 8.0.2 with nDPI support
 
@@ -98,7 +123,7 @@ tar xzf suricata-8.0.2.tar.gz
 cd suricata-8.0.2
 ```
 
-Configure Suricata with nDPI enabled (adjust the nDPI path if you cloned it elsewhere):
+Configure Suricata with nDPI enabled (adjust the nDPI path if needed):
 
 ```bash
 ./configure \
@@ -119,20 +144,20 @@ sudo ldconfig
 
 After this step you should have:
 
-- `suricata` installed under `/usr/bin`.
-- Configuration directory under `/etc/suricata`.
-- `ndpi.so` installed under `/usr/lib/suricata` or `/usr/local/lib/suricata`.
+- `suricata` under `/usr/bin`.
+- `/etc/suricata` configuration directory.
+- `ndpi.so` under `/usr/lib/suricata` or `/usr/local/lib/suricata`.
 
 ### 4. Enable the nDPI plugin in Suricata configuration
 
-In your active Suricata configuration (or in the template used by this project), ensure the plugin section contains the nDPI shared object:
+Ensure the plugin section contains the nDPI shared object:
 
 ```yaml
 plugins:
   - /usr/lib/suricata/ndpi.so
 ```
 
-Adjust the path if `ndpi.so` is installed under `/usr/local/lib/suricata` instead.
+Adjust the path if `ndpi.so` is installed under `/usr/local/lib/suricata`.
 
 ### 5. Basic verification
 
@@ -145,35 +170,34 @@ ls -l /usr/lib/suricata/ndpi.so || \
 sudo suricata -c /etc/suricata/suricata.yaml -T
 ```
 
-If the config test passes and `ndpi.so` is found, the Suricata + nDPI environment is ready to be managed by the integration service and Host Agent.
-
-## nDPI plugin enable/disable (Host Agent)
-
-Because Suricata must be restarted to (un)load the nDPI plugin shared object (`ndpi.so`), the integration service does not perform plugin toggling directly. Instead, plugin enable/disable is delegated to a Host Agent running on the Suricata host.
+## Host Agent
 
 ### What the Host Agent does
 
-- Modifies the active Suricata configuration (`suricata.yaml`) by commenting/uncommenting the `ndpi.so` plugin line within the `plugins:` section.
-- Writes the updated configuration atomically to avoid partial writes and corrupted configs.
-- Restarts Suricata via systemd to apply the change reliably.
+- Modifies active `suricata.yaml` by commenting/uncommenting the `ndpi.so`
+  plugin line within the `plugins:` section.
+- Writes the updated configuration atomically.
+- Restarts Suricata via systemd only if a state change is needed.
 
 ### Why a Host Agent is required
 
-In typical deployments, the integration service runs in a container, while Suricata runs on the host. Restarting Suricata and editing `/etc/suricata/suricata.yaml` requires host-level privileges and access to systemd, which is intentionally not granted to the containerized integration service.
+In typical deployments the integration service runs in a container, while
+Suricata runs on the host. Editing `/etc/suricata/suricata.yaml` and restarting
+Suricata require host-level privileges and systemd access, which is not granted
+to the container.
 
 ### API overview (Unix socket)
 
-The Host Agent exposes a small HTTP API over a Unix socket:
-
 - `GET /health` - liveness probe.
-- `POST /suricata/ensure` - ensures Suricata is running and the control socket is reachable.
-- `GET /ndpi/status` - returns current desired state based on config contents.
-- `POST /ndpi/enable` - enables the nDPI plugin and restarts Suricata.
-- `POST /ndpi/disable` - disables the nDPI plugin and restarts Suricata.
+- `POST /suricata/ensure` - ensure Suricata is running and socket is reachable.
+- `GET /ndpi/status` - current state from config contents.
+- `POST /ndpi/enable` - enable nDPI plugin and restart Suricata.
+- `POST /ndpi/disable` - disable nDPI plugin and restart Suricata.
+- `POST /suricata/reload` - reload rules via `suricatasc`.
 
 ### Example usage
 
-Start host-agent:
+Start Host Agent:
 
 - `sudo ./bin/host-agent serve --config config/config.yaml --sock /run/ndpi-agent.sock`
 
@@ -187,12 +211,15 @@ Disable nDPI:
 
 ### Operational notes
 
-Enabling/disabling the plugin is a restart-level change and may briefly interrupt traffic inspection during Suricata restart.
-Reload operations (`suricatasc`, ExecReload) are suitable for reloadable changes (rules/config updates) but are not reliable for dynamic plugin (un)loading.
+Enabling/disabling the plugin is a restart-level change and may briefly
+interrupt traffic inspection during Suricata restart. Reload operations
+(`suricatasc`, ExecReload) are suitable for reloadable changes but are not
+reliable for dynamic plugin (un)loading.
 
 ## Host Agent deployment (systemd)
 
-> Assumption: `host-agent` is installed at `/usr/local/bin/host-agent`, and config is at `/etc/integration-suricata-ndpi/config.yaml`.
+> Assumption: `host-agent` is installed at `/usr/local/bin/host-agent`, and
+> config is at `/etc/integration-suricata-ndpi/config.yaml`.
 
 Install unit files:
 
@@ -208,7 +235,7 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now ndpi-agent.socket
 ```
 
-Optional: “always-on” mode (run service even without incoming requests):
+Optional: always-on mode (run service even without incoming requests):
 
 ```bash
 sudo systemctl enable --now ndpi-agent.service
@@ -222,47 +249,11 @@ sudo install -m 0755 bin/host-agent /usr/local/bin/host-agent
 sudo systemctl start ndpi-agent.socket
 ```
 
-## Host Agent API (Unix socket)
-
-Default socket: `/run/ndpi-agent.sock`
-
-### Liveness
-
-- `sudo curl --unix-socket /run/ndpi-agent.sock http://localhost/health`
-
-### Ensure Suricata control socket is reachable (and restart Suricata if needed)
-
-- `sudo curl -X POST --unix-socket /run/ndpi-agent.sock http://localhost/suricata/ensure`
-
-## Quick verification
-
-### Host Agent (Unix socket)
-
-```bash
-sudo curl -sS --unix-socket /run/ndpi-agent.sock http://localhost/health
-sudo curl -sS -X POST --unix-socket /run/ndpi-agent.sock http://localhost/suricata/ensure
-sudo curl -sS --unix-socket /run/ndpi-agent.sock http://localhost/ndpi/status
-```
-
-### Integration service (TCP)
-
-```bash
-curl -sS http://localhost:8080/health
-curl -sS http://localhost:8080/plan
-curl -sS -X POST http://localhost:8080/apply
-```
-
-### nDPI status / enable / disable
-
-- status: `sudo curl --unix-socket /run/ndpi-agent.sock http://localhost/ndpi/status`
-- enable: `sudo curl -X POST --unix-socket /run/ndpi-agent.sock http://localhost/ndpi/enable`
-- disable: `sudo curl -X POST --unix-socket /run/ndpi-agent.sock http://localhost/ndpi/disable`
-
 ## Integration service API (TCP)
 
-Default listen: `http.addr` (example `:8080`).
+Default listen address: `http.addr` (example `:8080`).
 
-### Health (GET only)
+### Health
 
 - `curl http://localhost:8080/health`
 
@@ -271,12 +262,12 @@ Default listen: `http.addr` (example `:8080`).
 - `curl http://localhost:8080/plan`
 - `curl -X POST http://localhost:8080/apply`
 
-### nDPI toggle via integration (delegates to host-agent over Unix socket)
+### nDPI toggle via integration (delegates to Host Agent)
 
 - `curl -X POST http://localhost:8080/ndpi/enable`
 - `curl -X POST http://localhost:8080/ndpi/disable`
 
-## Operational commands (system)
+## Operational commands
 
 ### Check service/socket state
 
@@ -285,30 +276,10 @@ sudo systemctl status ndpi-agent.socket
 sudo systemctl status ndpi-agent.service
 ```
 
-## Requirements
-
-- Suricata installed and managed by systemd (service name: `system.suricata_service`, usually `suricata`).
-- Suricata control socket available (one of `suricata.socket_candidates`, example `/run/suricata/suricata-command.socket`).
-- Host agent installed: `/usr/local/bin/host-agent`.
-- Host agent config present: `/etc/integration-suricata-ndpi/config.yaml`.
-- nDPI plugin file exists on host: `paths.ndpi_plugin_path` (example `/usr/local/lib/suricata/ndpi.so`).
-- Permission to restart Suricata via systemctl (host-agent runs as root via systemd unit).
-
-## What is enabled / included
-
-Socket activation via `ndpi-agent.socket` (recommended default): host-agent starts on first request to `/run/ndpi-agent.sock`.
-
-Host-agent endpoints:
-
-- `/health` (GET)
-- `/suricata/ensure` (POST)
-- `/ndpi/status` (GET)
-- `/ndpi/enable` (POST)
-- `/ndpi/disable` (POST)
-
 ## Rules update (no Suricata restart)
 
-Suricata rules can be reloaded without restarting the Suricata process using `suricatasc reload-rules`.
+Suricata rules can be reloaded without restarting Suricata using
+`suricatasc reload-rules`.
 
 ### Manual reload (recommended for debugging)
 
@@ -321,3 +292,8 @@ sudo /usr/local/bin/suricatasc -c reload-rules /run/suricata/suricata-command.so
 ```bash
 sudo curl -sS -X POST --unix-socket /run/ndpi-agent.sock http://localhost/suricata/reload
 ```
+
+## Troubleshooting
+
+> **NEEDS CLARIFICATION**: provide common failure modes and remediation steps
+> (socket missing, permissions, systemd restart failures).
