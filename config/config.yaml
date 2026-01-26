@@ -13,6 +13,7 @@ ndpi:
   expected_rules_pattern: "/var/lib/suricata/rules/ndpi/*.rules"
 
 suricata:
+  start_timeout: "30s"
   socket_candidates:
     - "/run/suricata/suricata-command.socket"
     - "/var/run/suricata/suricata-command.socket"

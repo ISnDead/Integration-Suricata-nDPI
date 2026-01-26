@@ -35,57 +35,121 @@ func TestApplyDefaults(t *testing.T) {
 }
 
 func TestValidate_RequiredFields(t *testing.T) {
-	c := &Config{}
-	if err := validate(c); err == nil || err.Error() != "config: paths.ndpi_rules_local is required" {
-		t.Fatalf("want missing ndpi_rules_local, got %v", err)
+	base := func() *Config {
+		return &Config{
+			Paths: PathsConfig{
+				NDPIRulesLocal:   "rules/ndpi/",
+				SuricataTemplate: "config/suricata.yaml.tpl",
+				SuricataSC:       "/bin/true",
+			},
+			Suricata: SuricataConfig{
+				SocketCandidates: []string{"/tmp/s.sock"},
+				ConfigCandidates: []string{"/tmp/suricata.yaml"},
+				StartTimeout:     time.Second,
+			},
+			Reload: ReloadConfig{
+				Timeout: time.Second,
+				Command: "reload-rules",
+			},
+		}
 	}
 
-	c.Paths.NDPIRulesLocal = "rules/ndpi/"
-	if err := validate(c); err == nil || err.Error() != "config: paths.suricata_template is required" {
-		t.Fatalf("want missing suricata_template, got %v", err)
+	cases := []struct {
+		name    string
+		cfg     *Config
+		wantErr string
+	}{
+		{
+			name:    "missing ndpi_rules_local",
+			cfg:     &Config{},
+			wantErr: "config: paths.ndpi_rules_local is required",
+		},
+		{
+			name: "missing suricata_template",
+			cfg: func() *Config {
+				c := base()
+				c.Paths.SuricataTemplate = ""
+				return c
+			}(),
+			wantErr: "config: paths.suricata_template is required",
+		},
+		{
+			name: "missing suricatasc",
+			cfg: func() *Config {
+				c := base()
+				c.Paths.SuricataSC = ""
+				return c
+			}(),
+			wantErr: "config: paths.suricatasc is required",
+		},
+		{
+			name: "missing socket_candidates",
+			cfg: func() *Config {
+				c := base()
+				c.Suricata.SocketCandidates = nil
+				return c
+			}(),
+			wantErr: "config: suricata.socket_candidates is required",
+		},
+		{
+			name: "missing config_candidates",
+			cfg: func() *Config {
+				c := base()
+				c.Suricata.ConfigCandidates = nil
+				return c
+			}(),
+			wantErr: "config: suricata.config_candidates is required",
+		},
+		{
+			name: "invalid start timeout",
+			cfg: func() *Config {
+				c := base()
+				c.Suricata.StartTimeout = 0
+				return c
+			}(),
+			wantErr: "config: suricata.start_timeout must be > 0",
+		},
+		{
+			name: "invalid reload timeout",
+			cfg: func() *Config {
+				c := base()
+				c.Reload.Timeout = 0
+				return c
+			}(),
+			wantErr: "config: reload.timeout must be > 0",
+		},
+		{
+			name: "reload command shutdown forbidden",
+			cfg: func() *Config {
+				c := base()
+				c.Reload.Command = "shutdown"
+				return c
+			}(),
+			wantErr: "config: reload.command=shutdown is forbidden",
+		},
 	}
 
-	c.Paths.SuricataTemplate = "config/suricata.yaml.tpl"
-	if err := validate(c); err == nil || err.Error() != "config: paths.suricatasc is required" {
-		t.Fatalf("want missing suricatasc, got %v", err)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validate(tc.cfg)
+			if err == nil || err.Error() != tc.wantErr {
+				t.Fatalf("want %q, got %v", tc.wantErr, err)
+			}
+		})
 	}
 
-	c.Paths.SuricataSC = "/bin/true"
-	if err := validate(c); err == nil || err.Error() != "config: suricata.socket_candidates is required" {
-		t.Fatalf("want missing socket_candidates, got %v", err)
-	}
-
-	c.Suricata.SocketCandidates = []string{"/tmp/s.sock"}
-	if err := validate(c); err == nil || err.Error() != "config: suricata.config_candidates is required" {
-		t.Fatalf("want missing config_candidates, got %v", err)
-	}
-
-	c.Suricata.ConfigCandidates = []string{"/tmp/suricata.yaml"}
-	if err := validate(c); err == nil || err.Error() != "config: reload.timeout must be > 0" {
-		t.Fatalf("want invalid timeout, got %v", err)
-	}
-
-	c.Reload.Timeout = time.Second
-	c.Reload.Command = "shutdown"
-	if err := validate(c); err == nil || err.Error() != "config: reload.command=shutdown is forbidden" {
-		t.Fatalf("want shutdown forbidden, got %v", err)
-	}
-
-	c.System.Systemctl = "/bin/systemctl"
-	c.System.SuricataService = "suricata"
-	c.Reload.Timeout = time.Second
-	c.Reload.Command = "none"
-	if err := validate(c); err != nil {
+	okCfg := base()
+	okCfg.Reload.Command = "none"
+	if err := validate(okCfg); err != nil {
 		t.Fatalf("want none allowed, got %v", err)
 	}
 
-	c.Reload.Command = "reload-rules"
-	c.System.Systemctl = ""
-	c.System.SuricataService = ""
-	if err := validate(c); err != nil {
+	okCfg.System.Systemctl = ""
+	okCfg.System.SuricataService = ""
+	okCfg.Reload.Command = "reload-rules"
+	if err := validate(okCfg); err != nil {
 		t.Fatalf("want system.* optional, got %v", err)
 	}
-
 }
 
 func TestLoad_OK_WithDefaults(t *testing.T) {

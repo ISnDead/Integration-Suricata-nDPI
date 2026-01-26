@@ -52,7 +52,7 @@ func (h *Handlers) SuricataEnsure(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), h.deps.RestartTimeout)
+	ctx, cancel := context.WithTimeout(r.Context(), h.deps.RestartTimeout)
 	defer cancel()
 
 	if err := h.deps.Systemd.Restart(ctx, h.deps.SuricataUnit, h.deps.RestartTimeout); err != nil {
@@ -133,7 +133,7 @@ func (h *Handlers) NDPIEnable(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if changed {
-		ctx, cancel := context.WithTimeout(context.Background(), h.deps.RestartTimeout)
+		ctx, cancel := context.WithTimeout(r.Context(), h.deps.RestartTimeout)
 		defer cancel()
 
 		if err := h.deps.Systemd.Restart(ctx, h.deps.SuricataUnit, h.deps.RestartTimeout); err != nil {
@@ -169,7 +169,7 @@ func (h *Handlers) NDPIDisable(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if changed {
-		ctx, cancel := context.WithTimeout(context.Background(), h.deps.RestartTimeout)
+		ctx, cancel := context.WithTimeout(r.Context(), h.deps.RestartTimeout)
 		defer cancel()
 
 		if err := h.deps.Systemd.Restart(ctx, h.deps.SuricataUnit, h.deps.RestartTimeout); err != nil {

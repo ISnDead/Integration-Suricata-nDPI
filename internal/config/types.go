@@ -21,8 +21,9 @@ type NDPIConfig struct {
 }
 
 type SuricataConfig struct {
-	SocketCandidates []string `yaml:"socket_candidates"`
-	ConfigCandidates []string `yaml:"config_candidates"`
+	SocketCandidates []string      `yaml:"socket_candidates"`
+	ConfigCandidates []string      `yaml:"config_candidates"`
+	StartTimeout     time.Duration `yaml:"start_timeout"`
 }
 
 type ApplyConfig struct {

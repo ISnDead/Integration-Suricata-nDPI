@@ -12,6 +12,9 @@ func main() {
 	defer logger.Sync()
 
 	if err := cli.NewHostAgentApp().Run(os.Args); err != nil {
-		logger.Fatalw("Command failed", "error", err)
+		logger.Errorw("Command failed", "error", err)
+		logger.Sync()
+		os.Exit(1)
 	}
+
 }

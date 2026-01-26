@@ -37,7 +37,7 @@ func buildRunnerOptions(cfg *config.Config, runner executil.Runner, fs fsutil.FS
 			SocketCandidates: suricata.SocketCandidates,
 			SystemctlPath:    cfg.System.Systemctl,
 			SystemdUnit:      cfg.System.SuricataService,
-			StartTimeout:     reload.Timeout,
+			StartTimeout:     suricata.StartTimeout,
 		},
 	}
 }

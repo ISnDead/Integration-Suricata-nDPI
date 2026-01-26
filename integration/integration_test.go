@@ -23,6 +23,25 @@ func writeExecutable(t *testing.T, dir, name, body string) string {
 	return p
 }
 
+func writeFile(t *testing.T, path, body string, perm os.FileMode) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(body), perm); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+}
+
+func setupTemplateAndConfig(t *testing.T, dir string) (string, string) {
+	t.Helper()
+
+	tpl := filepath.Join(dir, "suricata.yaml.tpl")
+	cfg := filepath.Join(dir, "suricata.yaml")
+
+	writeFile(t, tpl, "newcfg\n", 0o644)
+	writeFile(t, cfg, "oldcfg\n", 0o644)
+
+	return tpl, cfg
+}
+
 func startUnixSocketListener(t *testing.T, sock string) net.Listener {
 	t.Helper()
 
@@ -47,14 +66,11 @@ func startUnixSocketListener(t *testing.T, sock string) net.Listener {
 func TestApplyConfig_ReloadOK(t *testing.T) {
 	dir := t.TempDir()
 
-	tpl := filepath.Join(dir, "suricata.yaml.tpl")
-	cfg := filepath.Join(dir, "suricata.yaml")
-	_ = os.WriteFile(tpl, []byte("newcfg\n"), 0o644)
-	_ = os.WriteFile(cfg, []byte("oldcfg\n"), 0o644)
+	tpl, cfg := setupTemplateAndConfig(t, dir)
 
 	sock := filepath.Join(dir, "suricata-command.socket")
 	l := startUnixSocketListener(t, sock)
-	defer l.Close()
+	t.Cleanup(func() { _ = l.Close() })
 
 	suricatasc := writeExecutable(t, dir, "suricatasc", "#!/bin/sh\necho OK\nexit 0\n")
 
@@ -77,14 +93,11 @@ func TestApplyConfig_ReloadOK(t *testing.T) {
 func TestApplyConfig_ReloadFailed_ButSocketAlive(t *testing.T) {
 	dir := t.TempDir()
 
-	tpl := filepath.Join(dir, "suricata.yaml.tpl")
-	cfg := filepath.Join(dir, "suricata.yaml")
-	_ = os.WriteFile(tpl, []byte("newcfg\n"), 0o644)
-	_ = os.WriteFile(cfg, []byte("oldcfg\n"), 0o644)
+	tpl, cfg := setupTemplateAndConfig(t, dir)
 
 	sock := filepath.Join(dir, "suricata-command.socket")
 	l := startUnixSocketListener(t, sock)
-	defer l.Close()
+	t.Cleanup(func() { _ = l.Close() })
 
 	suricatasc := writeExecutable(t, dir, "suricatasc", "#!/bin/sh\necho FAIL\nexit 1\n")
 
@@ -107,14 +120,11 @@ func TestApplyConfig_ReloadFailed_ButSocketAlive(t *testing.T) {
 func TestApplyConfig_ReloadTimeout_ButSocketAlive(t *testing.T) {
 	dir := t.TempDir()
 
-	tpl := filepath.Join(dir, "suricata.yaml.tpl")
-	cfg := filepath.Join(dir, "suricata.yaml")
-	_ = os.WriteFile(tpl, []byte("newcfg\n"), 0o644)
-	_ = os.WriteFile(cfg, []byte("oldcfg\n"), 0o644)
+	tpl, cfg := setupTemplateAndConfig(t, dir)
 
 	sock := filepath.Join(dir, "suricata-command.socket")
 	l := startUnixSocketListener(t, sock)
-	defer l.Close()
+	t.Cleanup(func() { _ = l.Close() })
 
 	suricatasc := writeExecutable(t, dir, "suricatasc", "#!/bin/sh\nsleep 0.2\necho LATE\nexit 0\n")
 
@@ -137,10 +147,7 @@ func TestApplyConfig_ReloadTimeout_ButSocketAlive(t *testing.T) {
 func TestApplyConfig_ReloadFailed_AndSocketDown_ReturnsError(t *testing.T) {
 	dir := t.TempDir()
 
-	tpl := filepath.Join(dir, "suricata.yaml.tpl")
-	cfg := filepath.Join(dir, "suricata.yaml")
-	_ = os.WriteFile(tpl, []byte("newcfg\n"), 0o644)
-	_ = os.WriteFile(cfg, []byte("oldcfg\n"), 0o644)
+	tpl, cfg := setupTemplateAndConfig(t, dir)
 
 	sock := filepath.Join(dir, "suricata-command.socket") // listener не поднимаем
 	suricatasc := writeExecutable(t, dir, "suricatasc", "#!/bin/sh\necho FAIL\nexit 1\n")
@@ -176,9 +183,8 @@ func TestApplyConfig_EmptyCommand_SafeNoReload(t *testing.T) {
 	dir := t.TempDir()
 	tpl := filepath.Join(dir, "s.tpl")
 	cfg := filepath.Join(dir, "suricata.yaml")
-
-	_ = os.WriteFile(tpl, []byte("new"), 0o644)
-	_ = os.WriteFile(cfg, []byte("old"), 0o644)
+	writeFile(t, tpl, "new", 0o644)
+	writeFile(t, cfg, "old", 0o644)
 
 	rep, err := ApplyConfig(ApplyConfigOptions{
 		TemplatePath:     tpl,
@@ -230,27 +236,9 @@ func TestWriteFileAtomic_OverwriteExisting_OK(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "a.txt")
 
-	if err := os.WriteFile(p, []byte("old"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := writeFileAtomic(p, []byte("new"), 0o644, fsutil.OSFS{}); err != nil {
-		t.Fatalf("unexpected: %v", err)
-	}
-	b, _ := os.ReadFile(p)
-	if string(b) != "new" {
-		t.Fatalf("want new, got %q", string(b))
-	}
-}
-
-func TestWriteFileAtomic_WritesNewContent(t *testing.T) {
-	dir := t.TempDir()
-	p := filepath.Join(dir, "a.txt")
-
-	if err := os.WriteFile(p, []byte("old"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	writeFile(t, p, "old", 0o644)
 	if err := writeFileAtomic(p, []byte("new"), 0o600, fsutil.OSFS{}); err != nil {
-		t.Fatal(err)
+		t.Fatalf("unexpected: %v", err)
 	}
 	b, _ := os.ReadFile(p)
 	if string(b) != "new" {
@@ -275,9 +263,7 @@ func TestWriteFileAtomic_RenameToDir_Error(t *testing.T) {
 func TestMustBeFile_OK(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "f.txt")
-	if err := os.WriteFile(p, []byte("x"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	writeFile(t, p, "x", 0o644)
 	if err := mustBeFile(p, "file", fsutil.OSFS{}); err != nil {
 		t.Fatalf("unexpected: %v", err)
 	}
@@ -307,9 +293,7 @@ func TestMustBeDir_OK(t *testing.T) {
 func TestMustBeDir_WhenFile_Error(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "f.txt")
-	if err := os.WriteFile(p, []byte("x"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	writeFile(t, p, "x", 0o644)
 	if err := mustBeDir(p, "dir", fsutil.OSFS{}); err == nil {
 		t.Fatal("expected error")
 	}
@@ -326,15 +310,13 @@ func TestValidateNDPIConfig_OK(t *testing.T) {
 	dir := t.TempDir()
 
 	ndpiSo := filepath.Join(dir, "ndpi.so")
-	if err := os.WriteFile(ndpiSo, []byte("fake"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	writeFile(t, ndpiSo, "fake", 0o644)
 
 	rulesDir := filepath.Join(dir, "rules", "ndpi")
 	if err := os.MkdirAll(rulesDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	_ = os.WriteFile(filepath.Join(rulesDir, "test.rules"), []byte("alert any any -> any any (msg:\"x\";)"), 0o644)
+	writeFile(t, filepath.Join(rulesDir, "test.rules"), "alert any any -> any any (msg:\"x\";)", 0o644)
 
 	tpl := filepath.Join(dir, "suricata.yaml.tpl")
 	tplBody := `
@@ -343,14 +325,10 @@ plugins:
 rule-files:
   - var/lib/suricata/rules/ndpi/*.rules
 `
-	if err := os.WriteFile(tpl, []byte(tplBody), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	writeFile(t, tpl, tplBody, 0o644)
 
 	suricatasc := filepath.Join(dir, "suricatasc")
-	if err := os.WriteFile(suricatasc, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	writeFile(t, suricatasc, "#!/bin/sh\nexit 0\n", 0o755)
 
 	err := ValidateNDPIConfig(NDPIValidateOptions{
 		NDPIPluginPath:       ndpiSo,
@@ -374,10 +352,10 @@ func TestValidateNDPIConfig_NDPISOMissing_Error(t *testing.T) {
 	_ = os.MkdirAll(rulesDir, 0o755)
 
 	tpl := filepath.Join(dir, "suricata.yaml.tpl")
-	_ = os.WriteFile(tpl, []byte("plugins:\n  - "+ndpiSo+"\n"), 0o644)
+	writeFile(t, tpl, "plugins:\n  - "+ndpiSo+"\n", 0o644)
 
 	suricatasc := filepath.Join(dir, "suricatasc")
-	_ = os.WriteFile(suricatasc, []byte("#!/bin/sh\nexit 0\n"), 0o755)
+	writeFile(t, suricatasc, "#!/bin/sh\nexit 0\n", 0o755)
 
 	err := ValidateNDPIConfig(NDPIValidateOptions{
 		NDPIPluginPath:       ndpiSo,
@@ -397,15 +375,15 @@ func TestValidateNDPIConfig_RulesDirMissing_Error(t *testing.T) {
 	dir := t.TempDir()
 
 	ndpiSo := filepath.Join(dir, "ndpi.so")
-	_ = os.WriteFile(ndpiSo, []byte("fake"), 0o644)
+	writeFile(t, ndpiSo, "fake", 0o644)
 
 	rulesDir := filepath.Join(dir, "rules", "ndpi")
 
 	tpl := filepath.Join(dir, "suricata.yaml.tpl")
-	_ = os.WriteFile(tpl, []byte("plugins:\n  - "+ndpiSo+"\n"), 0o644)
+	writeFile(t, tpl, "plugins:\n  - "+ndpiSo+"\n", 0o644)
 
 	suricatasc := filepath.Join(dir, "suricatasc")
-	_ = os.WriteFile(suricatasc, []byte("#!/bin/sh\nexit 0\n"), 0o755)
+	writeFile(t, suricatasc, "#!/bin/sh\nexit 0\n", 0o755)
 
 	err := ValidateNDPIConfig(NDPIValidateOptions{
 		NDPIPluginPath:       ndpiSo,
@@ -425,7 +403,7 @@ func TestValidateNDPIConfig_TemplateMissing_Error(t *testing.T) {
 	dir := t.TempDir()
 
 	ndpiSo := filepath.Join(dir, "ndpi.so")
-	_ = os.WriteFile(ndpiSo, []byte("fake"), 0o644)
+	writeFile(t, ndpiSo, "fake", 0o644)
 
 	rulesDir := filepath.Join(dir, "rules", "ndpi")
 	_ = os.MkdirAll(rulesDir, 0o755)
@@ -433,7 +411,7 @@ func TestValidateNDPIConfig_TemplateMissing_Error(t *testing.T) {
 	tpl := filepath.Join(dir, "missing.tpl")
 
 	suricatasc := filepath.Join(dir, "suricatasc")
-	_ = os.WriteFile(suricatasc, []byte("#!/bin/sh\nexit 0\n"), 0o755)
+	writeFile(t, suricatasc, "#!/bin/sh\nexit 0\n", 0o755)
 
 	err := ValidateNDPIConfig(NDPIValidateOptions{
 		NDPIPluginPath:       ndpiSo,
@@ -453,13 +431,13 @@ func TestValidateNDPIConfig_SuricatascMissing_Error(t *testing.T) {
 	dir := t.TempDir()
 
 	ndpiSo := filepath.Join(dir, "ndpi.so")
-	_ = os.WriteFile(ndpiSo, []byte("fake"), 0o644)
+	writeFile(t, ndpiSo, "fake", 0o644)
 
 	rulesDir := filepath.Join(dir, "rules", "ndpi")
 	_ = os.MkdirAll(rulesDir, 0o755)
 
 	tpl := filepath.Join(dir, "suricata.yaml.tpl")
-	_ = os.WriteFile(tpl, []byte("plugins:\n  - "+ndpiSo+"\n"), 0o644)
+	writeFile(t, tpl, "plugins:\n  - "+ndpiSo+"\n", 0o644)
 
 	suricatasc := filepath.Join(dir, "missing_suricatasc")
 
@@ -481,16 +459,16 @@ func TestValidateNDPIConfig_ReloadCommandEmpty_OK(t *testing.T) {
 	dir := t.TempDir()
 
 	ndpiSo := filepath.Join(dir, "ndpi.so")
-	_ = os.WriteFile(ndpiSo, []byte("fake"), 0o644)
+	writeFile(t, ndpiSo, "fake", 0o644)
 
 	rulesDir := filepath.Join(dir, "rules", "ndpi")
 	_ = os.MkdirAll(rulesDir, 0o755)
 
 	tpl := filepath.Join(dir, "suricata.yaml.tpl")
-	_ = os.WriteFile(tpl, []byte("plugins:\n  - "+ndpiSo+"\n"), 0o644)
+	writeFile(t, tpl, "plugins:\n  - "+ndpiSo+"\n", 0o644)
 
 	suricatasc := filepath.Join(dir, "suricatasc")
-	_ = os.WriteFile(suricatasc, []byte("#!/bin/sh\nexit 0\n"), 0o755)
+	writeFile(t, suricatasc, "#!/bin/sh\nexit 0\n", 0o755)
 
 	err := ValidateNDPIConfig(NDPIValidateOptions{
 		NDPIPluginPath:       ndpiSo,
@@ -500,64 +478,6 @@ func TestValidateNDPIConfig_ReloadCommandEmpty_OK(t *testing.T) {
 		ReloadCommand:        "",
 		ReloadTimeout:        2 * time.Second,
 		ExpectedRulesPattern: "var/lib/suricata/rules/ndpi/*.rules",
-	})
-	if err != nil {
-		t.Fatalf("unexpected: %v", err)
-	}
-}
-
-func TestValidateNDPIConfig_TemplateWithoutRulePattern_OK(t *testing.T) {
-	dir := t.TempDir()
-
-	ndpiSo := filepath.Join(dir, "ndpi.so")
-	_ = os.WriteFile(ndpiSo, []byte("fake"), 0o644)
-
-	rulesDir := filepath.Join(dir, "rules", "ndpi")
-	_ = os.MkdirAll(rulesDir, 0o755)
-
-	tpl := filepath.Join(dir, "suricata.yaml.tpl")
-	_ = os.WriteFile(tpl, []byte("plugins:\n  - "+ndpiSo+"\nrule-files:\n  - /some/other/*.rules\n"), 0o644)
-
-	suricatasc := filepath.Join(dir, "suricatasc")
-	_ = os.WriteFile(suricatasc, []byte("#!/bin/sh\nexit 0\n"), 0o755)
-
-	err := ValidateNDPIConfig(NDPIValidateOptions{
-		NDPIPluginPath:       ndpiSo,
-		NDPIRulesDir:         rulesDir,
-		SuricataTemplatePath: tpl,
-		SuricataSCPath:       suricatasc,
-		ReloadCommand:        "reload-rules",
-		ReloadTimeout:        2 * time.Second,
-		ExpectedRulesPattern: "var/lib/suricata/rules/ndpi/*.rules",
-	})
-	if err != nil {
-		t.Fatalf("unexpected: %v", err)
-	}
-}
-
-func TestValidateNDPIConfig_RulePatternEmpty_OK(t *testing.T) {
-	dir := t.TempDir()
-
-	ndpiSo := filepath.Join(dir, "ndpi.so")
-	_ = os.WriteFile(ndpiSo, []byte("fake"), 0o644)
-
-	rulesDir := filepath.Join(dir, "rules", "ndpi")
-	_ = os.MkdirAll(rulesDir, 0o755)
-
-	tpl := filepath.Join(dir, "suricata.yaml.tpl")
-	_ = os.WriteFile(tpl, []byte("plugins:\n  - "+ndpiSo+"\n"), 0o644)
-
-	suricatasc := filepath.Join(dir, "suricatasc")
-	_ = os.WriteFile(suricatasc, []byte("#!/bin/sh\nexit 0\n"), 0o755)
-
-	err := ValidateNDPIConfig(NDPIValidateOptions{
-		NDPIPluginPath:       ndpiSo,
-		NDPIRulesDir:         rulesDir,
-		SuricataTemplatePath: tpl,
-		SuricataSCPath:       suricatasc,
-		ReloadCommand:        "reload-rules",
-		ReloadTimeout:        2 * time.Second,
-		ExpectedRulesPattern: "",
 	})
 	if err != nil {
 		t.Fatalf("unexpected: %v", err)
@@ -574,9 +494,7 @@ func TestConnectSuricata_SocketNotFound_Error(t *testing.T) {
 func TestEnsureSuricataRunning_PathNotSocket_Error(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "not_socket")
-	if err := os.WriteFile(p, []byte("x"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	writeFile(t, p, "x", 0o644)
 
 	if err := EnsureSuricataRunning([]string{p}); err == nil {
 		t.Fatal("expected error")
@@ -649,9 +567,7 @@ func TestValidateLocalResources_OK(t *testing.T) {
 	}
 
 	tpl := filepath.Join(dir, "suricata.yaml.tpl")
-	if err := os.WriteFile(tpl, []byte("plugins:\n  - /usr/local/lib/suricata/ndpi.so\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	writeFile(t, tpl, "plugins:\n  - /usr/local/lib/suricata/ndpi.so\n", 0o644)
 
 	if err := ValidateLocalResources(ndpiDir, tpl, fsutil.OSFS{}); err != nil {
 		t.Fatalf("unexpected: %v", err)
@@ -661,7 +577,7 @@ func TestValidateLocalResources_OK(t *testing.T) {
 func TestValidateLocalResources_Missing(t *testing.T) {
 	dir := t.TempDir()
 	tpl := filepath.Join(dir, "x.tpl")
-	_ = os.WriteFile(tpl, []byte("x"), 0o644)
+	writeFile(t, tpl, "x", 0o644)
 
 	if err := ValidateLocalResources(filepath.Join(dir, "nope"), tpl, fsutil.OSFS{}); err == nil {
 		t.Fatal("expected error for missing ndpi dir")

@@ -66,6 +66,7 @@ func New(deps Deps) (*Server, error) {
 	mux.HandleFunc("/ndpi/status", h.NDPIStatus)
 	mux.HandleFunc("/ndpi/enable", h.NDPIEnable)
 	mux.HandleFunc("/ndpi/disable", h.NDPIDisable)
+	mux.HandleFunc("/suricata/reload", h.SuricataReload)
 
 	s := &http.Server{
 		Handler:           mux,

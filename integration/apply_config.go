@@ -16,6 +16,10 @@ import (
 const defaultReloadTimeout = 10 * time.Second
 
 func ApplyConfig(opts ApplyConfigOptions) (ApplyConfigReport, error) {
+	return ApplyConfigWithContext(context.Background(), opts)
+}
+
+func ApplyConfigWithContext(ctx context.Context, opts ApplyConfigOptions) (ApplyConfigReport, error) {
 	templatePath := opts.TemplatePath
 	configCandidates := opts.ConfigCandidates
 	socketCandidates := opts.SocketCandidates
@@ -93,13 +97,13 @@ func ApplyConfig(opts ApplyConfigOptions) (ApplyConfigReport, error) {
 		report.ReloadTimeout = reloadTimeout
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), reloadTimeout)
+	rctx, cancel := context.WithTimeout(ctx, reloadTimeout)
 	defer cancel()
 
-	out, err := commandRunner.CombinedOutput(ctx, suricatascPath, "-c", reloadCommand)
+	out, err := commandRunner.CombinedOutput(rctx, suricatascPath, "-c", reloadCommand)
 	report.ReloadOutput = strings.TrimSpace(string(out))
 
-	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+	if errors.Is(rctx.Err(), context.DeadlineExceeded) {
 		report.ReloadStatus = ReloadTimeout
 		report.Warnings = append(report.Warnings,
 			fmt.Sprintf("suricatasc timeout: command=%q timeout=%s", reloadCommand, reloadTimeout),
@@ -118,6 +122,10 @@ func ApplyConfig(opts ApplyConfigOptions) (ApplyConfigReport, error) {
 			"command", reloadCommand,
 		)
 		return report, nil
+	}
+
+	if err == nil && rctx.Err() != nil {
+		return report, rctx.Err()
 	}
 
 	if err != nil {

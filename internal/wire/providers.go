@@ -85,6 +85,10 @@ func newHostAgentService(opts HostAgentOptions) (app.Service, error) {
 		SuricataCfgPath: suricataCfgPath,
 		NDPIPluginPath:  ndpiPluginPath,
 
+		SuricataSCPath: cfg.Paths.SuricataSC,
+		ReloadCommand:  cfg.Reload.Command,
+		ReloadTimeout:  cfg.Reload.Timeout,
+
 		RestartTimeout:         opts.RestartTimeout,
 		SuricataConnectTimeout: 300 * time.Millisecond,
 

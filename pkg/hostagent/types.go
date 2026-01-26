@@ -22,6 +22,10 @@ type Deps struct {
 	SuricataSocketCandidates []string
 	SuricataConnectTimeout   time.Duration
 
+	SuricataSCPath string
+	ReloadCommand  string
+	ReloadTimeout  time.Duration
+
 	RestartTimeout time.Duration
 	SystemctlPath  string
 	Systemd        SystemdManager

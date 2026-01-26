@@ -55,14 +55,13 @@ func (r *Runner) handleApply(w http.ResponseWriter, req *http.Request) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	// перед apply можно сделать ensure suricata (чтобы потом reload/сокет работали)
 	if err := r.ensureSuricataViaHostAgent(req.Context()); err != nil {
 		logger.Errorw("HTTP apply: suricata ensure failed", "error", err)
 		writeJSONError(w, http.StatusBadGateway, err.Error())
 		return
 	}
 
-	report, err := ApplyConfig(r.opts.Apply)
+	report, err := ApplyConfigWithContext(req.Context(), r.opts.Apply)
 	if err != nil {
 		writeJSONError(w, http.StatusInternalServerError, err.Error())
 		return
