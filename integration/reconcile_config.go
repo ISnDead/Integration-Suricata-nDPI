@@ -120,10 +120,6 @@ func ReconcileConfig(ctx context.Context, opts ApplyConfigOptions) (ReconcileRep
 	_ = fs.Remove(tmpPath)
 	rep.Applied = true
 
-	logger.Infow("Suricata YAML patched & validated (-T), now restarting service",
-		"path", target,
-	)
-
 	systemctl := strings.TrimSpace(opts.SystemctlPath)
 	if systemctl == "" {
 		systemctl = "/usr/bin/systemctl"
@@ -134,6 +130,11 @@ func ReconcileConfig(ctx context.Context, opts ApplyConfigOptions) (ReconcileRep
 	}
 
 	rep.RestartCommand = fmt.Sprintf("%s restart %s", systemctl, unit)
+
+	logger.Infow("Suricata YAML patched & validated (-T), restarting service",
+		"path", target,
+		"cmd", rep.RestartCommand,
+	)
 
 	rctx, rcancel := context.WithTimeout(ctx, 60*time.Second)
 	defer rcancel()

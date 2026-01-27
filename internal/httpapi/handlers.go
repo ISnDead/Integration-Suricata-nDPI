@@ -8,9 +8,9 @@ import (
 )
 
 type Deps struct {
-	Plan      func(ctx context.Context) (any, error)
-	Reconcile func(ctx context.Context) (any, error)
-	Apply     func(ctx context.Context) (any, error)
+	Plan      func(ctx context.Context) (any, error) // GET /plan (dry-run)
+	Reconcile func(ctx context.Context) (any, error) // POST /plan (patch+restart)
+	Apply     func(ctx context.Context) (any, error) // POST /apply (suricatasc reload)
 
 	EnsureSuricata func(ctx context.Context) error
 	EnableNDPI     func(ctx context.Context) (any, error)
@@ -35,6 +35,10 @@ func (h *Handlers) Health(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) Plan(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
+		if h.deps.Plan == nil {
+			writeJSONError(w, http.StatusInternalServerError, "plan is not configured")
+			return
+		}
 		resp, err := h.deps.Plan(r.Context())
 		if err != nil {
 			writeJSONError(w, http.StatusInternalServerError, err.Error())
@@ -67,9 +71,16 @@ func (h *Handlers) Apply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.deps.EnsureSuricata(r.Context()); err != nil {
-		logger.Errorw("HTTP apply: suricata ensure failed", "error", err)
-		writeJSONError(w, http.StatusBadGateway, err.Error())
+	if h.deps.EnsureSuricata != nil {
+		if err := h.deps.EnsureSuricata(r.Context()); err != nil {
+			logger.Errorw("HTTP apply: suricata ensure failed", "error", err)
+			writeJSONError(w, http.StatusBadGateway, err.Error())
+			return
+		}
+	}
+
+	if h.deps.Apply == nil {
+		writeJSONError(w, http.StatusInternalServerError, "apply is not configured")
 		return
 	}
 
@@ -85,6 +96,10 @@ func (h *Handlers) NDPIEnable(w http.ResponseWriter, r *http.Request) {
 	if !requireMethod(w, r, http.MethodPost) {
 		return
 	}
+	if h.deps.EnableNDPI == nil {
+		writeJSONError(w, http.StatusInternalServerError, "enable_ndpi is not configured")
+		return
+	}
 	resp, err := h.deps.EnableNDPI(r.Context())
 	if err != nil {
 		logger.Errorw("HTTP ndpi enable: failed", "error", err)
@@ -96,6 +111,10 @@ func (h *Handlers) NDPIEnable(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handlers) NDPIDisable(w http.ResponseWriter, r *http.Request) {
 	if !requireMethod(w, r, http.MethodPost) {
+		return
+	}
+	if h.deps.DisableNDPI == nil {
+		writeJSONError(w, http.StatusInternalServerError, "disable_ndpi is not configured")
 		return
 	}
 	resp, err := h.deps.DisableNDPI(r.Context())
