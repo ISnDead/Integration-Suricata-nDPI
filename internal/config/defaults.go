@@ -12,6 +12,9 @@ func applyDefaults(cfg *Config) {
 	if cfg.HTTP.HostAgentTimeout == 0 {
 		cfg.HTTP.HostAgentTimeout = 10 * time.Second
 	}
+	if cfg.Paths.SuricataBin == "" {
+		cfg.Paths.SuricataBin = "/usr/bin/suricata"
+	}
 	if cfg.Reload.Timeout == 0 {
 		cfg.Reload.Timeout = 5 * time.Second
 	}

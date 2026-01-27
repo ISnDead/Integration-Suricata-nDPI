@@ -15,6 +15,9 @@ func validate(cfg *Config) error {
 	if cfg.Paths.SuricataSC == "" {
 		return fmt.Errorf("config: paths.suricatasc is required")
 	}
+	if cfg.Paths.SuricataBin == "" {
+		return fmt.Errorf("config: paths.suricata_bin is required")
+	}
 	if len(cfg.Suricata.SocketCandidates) == 0 {
 		return fmt.Errorf("config: suricata.socket_candidates is required")
 	}

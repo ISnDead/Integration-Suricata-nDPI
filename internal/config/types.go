@@ -13,6 +13,7 @@ type PathsConfig struct {
 	NDPIPluginPath   string `yaml:"ndpi_plugin_path"`
 	SuricataTemplate string `yaml:"suricata_template"`
 	SuricataSC       string `yaml:"suricatasc"`
+	SuricataBin      string `yaml:"suricata_bin"`
 }
 
 type NDPIConfig struct {

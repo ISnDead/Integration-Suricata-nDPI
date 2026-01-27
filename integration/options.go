@@ -18,6 +18,7 @@ func buildRunnerOptions(cfg *config.Config, runner executil.Runner, fs fsutil.FS
 			ConfigCandidates: suricata.ConfigCandidates,
 			SocketCandidates: suricata.SocketCandidates,
 			SuricataSCPath:   paths.SuricataSC,
+			SuricataBinPath:  paths.SuricataBin,
 			ReloadCommand:    reload.Command,
 			ReloadTimeout:    reload.Timeout,
 			CommandRunner:    runner,

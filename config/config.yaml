@@ -8,6 +8,7 @@ paths:
   ndpi_plugin_path: "/usr/local/lib/suricata/ndpi.so"
   suricata_template: "config/suricata.yaml.tpl"
   suricatasc: "/usr/local/bin/suricatasc"
+  suricata_bin: "/usr/bin/suricata"
 
 ndpi:
   expected_rules_pattern: "/var/lib/suricata/rules/ndpi/*.rules"

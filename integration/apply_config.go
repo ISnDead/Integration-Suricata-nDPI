@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -24,6 +25,7 @@ func ApplyConfigWithContext(ctx context.Context, opts ApplyConfigOptions) (Apply
 	configCandidates := opts.ConfigCandidates
 	socketCandidates := opts.SocketCandidates
 	suricatascPath := opts.SuricataSCPath
+	suricataBinPath := strings.TrimSpace(opts.SuricataBinPath)
 	reloadCommand := opts.ReloadCommand
 	reloadTimeout := opts.ReloadTimeout
 	commandRunner := opts.CommandRunner
@@ -36,6 +38,10 @@ func ApplyConfigWithContext(ctx context.Context, opts ApplyConfigOptions) (Apply
 		commandRunner = executil.DefaultRunner{}
 	}
 
+	if suricataBinPath == "" {
+		suricataBinPath = "suricata"
+	}
+
 	report := ApplyConfigReport{
 		ReloadCommand: reloadCommand,
 		ReloadTimeout: reloadTimeout,
@@ -46,6 +52,7 @@ func ApplyConfigWithContext(ctx context.Context, opts ApplyConfigOptions) (Apply
 		"config_candidates", configCandidates,
 		"socket_candidates", socketCandidates,
 		"suricatasc", suricatascPath,
+		"suricata_bin", suricataBinPath,
 		"reload_command", reloadCommand,
 		"reload_timeout", reloadTimeout,
 	)
@@ -91,10 +98,29 @@ func ApplyConfigWithContext(ctx context.Context, opts ApplyConfigOptions) (Apply
 	}
 
 	if changed {
+		tmpPath := targetConfigPath + ".integration.tmp"
+
+		tmpPath = filepath.Clean(tmpPath)
+
+		if err := writeFileAtomic(tmpPath, updatedConfig, perm, fs); err != nil {
+			return report, fmt.Errorf("failed to write temp config %s: %w", tmpPath, err)
+		}
+
+		vctx := ctx
+		out, verr := commandRunner.CombinedOutput(vctx, suricataBinPath, "-T", "-c", tmpPath)
+		vout := strings.TrimSpace(string(out))
+		if verr != nil {
+			_ = tryRemove(fs, tmpPath)
+			return report, fmt.Errorf("suricata -T failed; config NOT applied. err=%v output=%q", verr, vout)
+		}
+
 		if err := writeFileAtomic(targetConfigPath, updatedConfig, perm, fs); err != nil {
+			_ = tryRemove(fs, tmpPath)
 			return report, fmt.Errorf("failed to write config %s: %w", targetConfigPath, err)
 		}
-		logger.Infow("Suricata config updated", "path", targetConfigPath)
+
+		_ = tryRemove(fs, tmpPath)
+		logger.Infow("Suricata config updated (validated by -T)", "path", targetConfigPath)
 	} else {
 		logger.Infow("Suricata config already contains required settings", "path", targetConfigPath)
 	}
@@ -171,4 +197,9 @@ func ApplyConfigWithContext(ctx context.Context, opts ApplyConfigOptions) (Apply
 	)
 
 	return report, nil
+}
+
+func tryRemove(fs fsutil.FS, path string) error {
+	_ = os.Remove(path)
+	return nil
 }
