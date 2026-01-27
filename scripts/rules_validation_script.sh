@@ -5,9 +5,10 @@ FILE_ACTION=action.txt
 FILE_RULES=../rules/manual/rules.rules
 FILE_REQUIRES=required_fields.txt
 FILE_TMP_SID=$(mktemp)
+FILE_VALID_RULES=../rules/ndpi/valid_rules.rules
 
 validate_action_and_protocol () {
-	# Проверка является ли протокол поддреживаемым
+	# Checking whether the protocol is amenable
 	if grep -x "$1" "$2" &>/dev/null; then
 		return 0
 	else
@@ -16,13 +17,21 @@ validate_action_and_protocol () {
 }
 
 cut_field () {
-	# Правильно нарезаем строку на поля для дальнейшей обработки
-	signature=$(echo "${1%%(msg*}" | sed 's/[()]//g')
+	# Correctly cut the string info fields for further processing
+	signature=$(echo "${1%%(msg*}")
 	metadata=${1##$signature}
 	return 0
 }
 
+cut_metadata_field () {
+	# Correctly slicing the metadata field into values for further processing
+	local all_value=$(echo $1 | sed "s/, /,/g"  |cut -d":" -f2)
+	IFS="," read -a stripes <<< "$all_value"
+	return 0
+}
+
 definition_sid () {
+	# Defining the sid of the rule
 	sid=$(echo $REPLY | sed 's/[^[:alnum:]: ]//g' | grep -o 'sid:[^ ]*' | cut -d':' -f2)
 	if grep -x "$sid" "$FILE_TMP_SID" &>/dev/null; then
 		return 1
@@ -32,8 +41,24 @@ definition_sid () {
 	fi
 }
 
+definition_requires () {
+	local requires_value
+	requires_value=$(printf "%s\n" "${array_meta[@]}" | grep "requires" | cut -d":" -f2)
+	flag_ndpi_protocol=1
+	flag_ndpi_risk=1
+	cut_metadata_field "$requires_value"
+	for (( i=0; i<"${#stripes[@]}"; i++ )); do
+		if [[ "${stripes[$i]}" == 'keyword ndpi-protocol' ]]; then
+			flag_ndpi_protocol=0
+		fi
+		if [[ "${stripes[$i]}" == 'keyword ndpi-risk' ]] ; then
+			flag_ndpi_risk=0
+         	fi
+	done
+}
+
 field_enumeration () {
-	# Проверка signature
+	# Verifying the signature part
 	IFS=' ' read -a array_sign <<< "$signature"
 	if [[ "${#array_sign[@]}" != '7' ]]; then
 		return 1
@@ -52,33 +77,62 @@ field_enumeration () {
 		fi
 	done
 
-	# Проверка metadata
-	IFS=';' read -a array_meta <<< "$metadata"
-	count=0
-
+	# Verifying the metadata part
 	if [[ ! "$metadata" =~ ^\(.+\)$ ]]; then
 		return 1
 	fi
 
+	# Clean metadata field
+	metadata=$(echo "$metadata" | sed 's/; /;/g')
+
+	IFS=';' read -a array_meta <<< "$metadata"
+	count=0
+	local flag_mitre=1
+	control_counter=$(wc -l < "$FILE_REQUIRES")
+
+	definition_requires
+
 	for (( i=0; i<"${#array_meta[@]}"; i++ )); do
+
 		local tmp_value=$(echo "${array_meta[$i]}" | sed 's/[() ]//g' | cut -d":" -f1)
+
+		# Checking the value of the metadata field
 		if [[ $tmp_value == 'metadata' ]]; then
-			if [[ ! "${array_meta[$i]}" =~ 'mitre_technique_id' ]] ; then
+			cut_metadata_field "${array_meta[$i]}"
+			for (( j=0; j<"${#stripes[@]}"; j++ )); do
+				if [[ "${stripes[$j]}" =~ 'mitre_technique_id' ]] ; then
+					flag_mitre=0
+				fi
+			done
+			if [[ $flag_mitre != '0' ]]; then
 				return 1
 			fi
 		fi
+
+		if [[ "$tmp_value" == 'ndpi-protocol' || "$tmp_value" == 'ndpi-risk' ]]; then
+			((count++))
+		fi
+
 		if grep -x "$tmp_value" "$FILE_REQUIRES" &>/dev/null; then
 			((count++))
 		fi
 	done
-	if [[ $count = $(wc -l < "$FILE_REQUIRES") ]]; then
+
+	if [[ "$flag_ndpi_protocol" == '0' ]]; then
+		((control_counter++))
+	fi
+
+	if [[ "$flag_ndpi_risk" == '0' ]]; then
+		((control_counter++))
+	fi
+	if [[ "$count" == "$control_counter" ]]; then
 		return 0
 	else
 		return 1
 	fi
 }
 
-> ../rules/checked/valid_rules.rules
+> $FILE_VALID_RULES
 
 while read; do
 	valid_string_flag=0
@@ -98,7 +152,6 @@ while read; do
 		((valid_string_flag++))
 	fi
 	if [[ $valid_string_flag == '2' ]]; then
-		echo "$REPLY" >> ../rules/checked/valid_rules.rules
+		echo "$REPLY" >> $FILE_VALID_RULES
 	fi
-
 done < $FILE_RULES
