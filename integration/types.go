@@ -29,6 +29,8 @@ type ApplyConfigOptions struct {
 	ConfigCandidates []string
 	SocketCandidates []string
 
+	SystemctlPath   string
+	SuricataService string
 	SuricataSCPath  string
 	SuricataBinPath string
 	ReloadCommand   string

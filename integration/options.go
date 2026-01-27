@@ -21,8 +21,12 @@ func buildRunnerOptions(cfg *config.Config, runner executil.Runner, fs fsutil.FS
 			SuricataBinPath:  paths.SuricataBin,
 			ReloadCommand:    reload.Command,
 			ReloadTimeout:    reload.Timeout,
-			CommandRunner:    runner,
-			FS:               fs,
+
+			SystemctlPath:   cfg.System.Systemctl,
+			SuricataService: cfg.System.SuricataService,
+
+			CommandRunner: runner,
+			FS:            fs,
 		},
 		NDPIValidate: NDPIValidateOptions{
 			NDPIPluginPath:       paths.NDPIPluginPath,

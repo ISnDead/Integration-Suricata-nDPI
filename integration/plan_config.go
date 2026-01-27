@@ -12,22 +12,25 @@ import (
 
 	"integration-suricata-ndpi/pkg/executil"
 	"integration-suricata-ndpi/pkg/fsutil"
+	"integration-suricata-ndpi/pkg/logger"
 )
 
 type PlanReport struct {
 	TemplatePath     string `json:"template_path"`
 	TargetConfigPath string `json:"target_config_path"`
 
-	CurrentSHA256  string `json:"current_sha256"`
-	RenderedSHA256 string `json:"rendered_sha256"`
+	CurrentSHA256 string `json:"current_sha256"`
+	PatchedSHA256 string `json:"patched_sha256"`
 
-	CurrentBytes  int `json:"current_bytes"`
-	RenderedBytes int `json:"rendered_bytes"`
+	CurrentBytes int `json:"current_bytes"`
+	PatchedBytes int `json:"patched_bytes"`
 
-	WouldWrite bool     `json:"would_write"`
-	Applied    bool     `json:"applied"`
-	Validated  bool     `json:"validated"`
-	Notes      []string `json:"notes,omitempty"`
+	Changed      bool `json:"changed"`
+	Validated    bool `json:"validated"`
+	Restarted    bool `json:"restarted"`
+	WouldRestart bool `json:"would_restart"`
+
+	Notes []string `json:"notes,omitempty"`
 }
 
 func PlanConfig(ctx context.Context, opts ApplyConfigOptions) (PlanReport, error) {
@@ -35,6 +38,7 @@ func PlanConfig(ctx context.Context, opts ApplyConfigOptions) (PlanReport, error
 	if fs == nil {
 		fs = fsutil.OSFS{}
 	}
+
 	runner := opts.CommandRunner
 	if runner == nil {
 		runner = executil.DefaultRunner{}
@@ -48,7 +52,8 @@ func PlanConfig(ctx context.Context, opts ApplyConfigOptions) (PlanReport, error
 	if err != nil {
 		return rep, fmt.Errorf("failed to read template %s: %w", opts.TemplatePath, err)
 	}
-	tplRendered, _, err := RenderTemplateStrict(tpl)
+
+	rendered, _, err := RenderTemplateStrict(tpl)
 	if err != nil {
 		return rep, fmt.Errorf("failed to render template %s: %w", opts.TemplatePath, err)
 	}
@@ -64,19 +69,21 @@ func PlanConfig(ctx context.Context, opts ApplyConfigOptions) (PlanReport, error
 		return rep, fmt.Errorf("failed to read current config %s: %w", target, err)
 	}
 
-	updated, changed, err := PatchSuricataConfigFromTemplate(tplRendered, current)
+	rep.CurrentBytes = len(current)
+	rep.CurrentSHA256 = sha256Hex(current)
+
+	patched, changed, err := PatchSuricataConfigFromTemplate(rendered, current)
 	if err != nil {
 		return rep, fmt.Errorf("failed to patch config %s: %w", target, err)
 	}
 
-	rep.CurrentBytes = len(current)
-	rep.RenderedBytes = len(updated)
-	rep.CurrentSHA256 = sha256Hex(current)
-	rep.RenderedSHA256 = sha256Hex(updated)
-	rep.WouldWrite = changed
+	rep.PatchedBytes = len(patched)
+	rep.PatchedSHA256 = sha256Hex(patched)
+	rep.Changed = changed
+	rep.WouldRestart = changed
 
 	if !changed {
-		rep.Notes = append(rep.Notes, "config already matches template blocks (plugins/unix-command); nothing to do")
+		rep.Notes = append(rep.Notes, "plugins/unix-command already match template; no write, no restart")
 		return rep, nil
 	}
 
@@ -90,8 +97,9 @@ func PlanConfig(ctx context.Context, opts ApplyConfigOptions) (PlanReport, error
 		perm = st.Mode().Perm()
 	}
 
-	tmpPath := filepath.Clean(target + ".integration.plan.tmp")
-	if err := writeFileAtomic(tmpPath, updated, perm, fs); err != nil {
+	tmpPath := filepath.Clean(target + ".plan.tmp")
+
+	if err := writeFileAtomic(tmpPath, patched, perm, fs); err != nil {
 		return rep, fmt.Errorf("failed to write temp config %s: %w", tmpPath, err)
 	}
 
@@ -111,14 +119,40 @@ func PlanConfig(ctx context.Context, opts ApplyConfigOptions) (PlanReport, error
 	}
 	rep.Validated = true
 
-	if err := writeFileAtomic(target, updated, perm, fs); err != nil {
+	if err := writeFileAtomic(target, patched, perm, fs); err != nil {
 		_ = tryRemove(fs, tmpPath)
 		return rep, fmt.Errorf("failed to write config %s: %w", target, err)
 	}
-
 	_ = tryRemove(fs, tmpPath)
-	rep.Applied = true
-	rep.Notes = append(rep.Notes, "patched plugins/unix-command blocks and validated with suricata -T")
+
+	logger.Infow("plan: suricata.yaml patched & validated; restarting suricata", "path", target)
+
+	systemctl := strings.TrimSpace(opts.SystemctlPath)
+	if systemctl == "" {
+		systemctl = "systemctl"
+	}
+	unit := strings.TrimSpace(opts.SuricataService)
+	if unit == "" {
+		unit = "suricata"
+	}
+
+	rctx := ctx
+	if rctx == nil {
+		rctx = context.Background()
+	}
+	rctx, rcancel := context.WithTimeout(rctx, 60*time.Second)
+	defer rcancel()
+
+	rout, rerr := runner.CombinedOutput(rctx, systemctl, "restart", unit)
+	if rerr != nil {
+		rep.Restarted = false
+		rep.Notes = append(rep.Notes, fmt.Sprintf("restart failed: %v output=%q", rerr, strings.TrimSpace(string(rout))))
+		return rep, fmt.Errorf("failed to restart suricata (%s restart %s): %v output=%q",
+			systemctl, unit, rerr, strings.TrimSpace(string(rout)))
+	}
+
+	rep.Restarted = true
+	rep.Notes = append(rep.Notes, "suricata restarted because config changed")
 
 	return rep, nil
 }
@@ -130,8 +164,11 @@ func sha256Hex(b []byte) string {
 
 func tryRemove(fs fsutil.FS, path string) error {
 	if fs == nil {
-		fs = fsutil.OSFS{}
+		return os.Remove(path)
 	}
-	_ = fs.Remove(path)
+	if r, ok := any(fs).(interface{ Remove(string) error }); ok {
+		return r.Remove(path)
+	}
+	_ = os.Remove(path)
 	return nil
 }
