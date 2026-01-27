@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"integration-suricata-ndpi/pkg/executil"
-	"integration-suricata-ndpi/pkg/fsutil"
 	"integration-suricata-ndpi/pkg/logger"
 )
 
@@ -27,9 +26,6 @@ func ApplyConfigWithContext(ctx context.Context, opts ApplyConfigOptions) (Apply
 	if commandRunner == nil {
 		commandRunner = executil.DefaultRunner{}
 	}
-
-	_ = opts.FS
-	_ = fsutil.OSFS{}
 
 	report := ApplyConfigReport{
 		ReloadCommand: reloadCommand,

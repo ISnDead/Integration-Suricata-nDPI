@@ -76,6 +76,12 @@ func (r *Runner) registerRoutes(mux *http.ServeMux) {
 			return PlanConfig(ctx, r.opts.Apply)
 		},
 
+		Reconcile: func(ctx context.Context) (any, error) {
+			r.mu.Lock()
+			defer r.mu.Unlock()
+			return ReconcileConfig(ctx, r.opts.Apply)
+		},
+
 		Apply: func(ctx context.Context) (any, error) {
 			r.mu.Lock()
 			defer r.mu.Unlock()

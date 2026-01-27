@@ -29,12 +29,14 @@ type ApplyConfigOptions struct {
 	ConfigCandidates []string
 	SocketCandidates []string
 
-	SystemctlPath   string
-	SuricataService string
 	SuricataSCPath  string
 	SuricataBinPath string
-	ReloadCommand   string
-	ReloadTimeout   time.Duration
+
+	SystemctlPath   string
+	SuricataService string
+
+	ReloadCommand string
+	ReloadTimeout time.Duration
 
 	CommandRunner executil.Runner
 	FS            fsutil.FS

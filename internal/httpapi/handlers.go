@@ -44,6 +44,10 @@ func (h *Handlers) Plan(w http.ResponseWriter, r *http.Request) {
 		return
 
 	case http.MethodPost:
+		if h.deps.Reconcile == nil {
+			writeJSONError(w, http.StatusInternalServerError, "reconcile is not configured")
+			return
+		}
 		resp, err := h.deps.Reconcile(r.Context())
 		if err != nil {
 			writeJSONError(w, http.StatusInternalServerError, err.Error())

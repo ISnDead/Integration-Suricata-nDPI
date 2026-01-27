@@ -11,6 +11,7 @@ func buildRunnerOptions(cfg *config.Config, runner executil.Runner, fs fsutil.FS
 	suricata := cfg.Suricata
 	reload := cfg.Reload
 	ndpi := cfg.NDPI
+	sys := cfg.System
 
 	return RunnerOptions{
 		Apply: ApplyConfigOptions{
@@ -19,12 +20,12 @@ func buildRunnerOptions(cfg *config.Config, runner executil.Runner, fs fsutil.FS
 			SocketCandidates: suricata.SocketCandidates,
 			SuricataSCPath:   paths.SuricataSC,
 			SuricataBinPath:  paths.SuricataBin,
-			ReloadCommand:    reload.Command,
-			ReloadTimeout:    reload.Timeout,
 
-			SystemctlPath:   cfg.System.Systemctl,
-			SuricataService: cfg.System.SuricataService,
+			SystemctlPath:   sys.Systemctl,
+			SuricataService: sys.SuricataService,
 
+			ReloadCommand: reload.Command,
+			ReloadTimeout: reload.Timeout,
 			CommandRunner: runner,
 			FS:            fs,
 		},
