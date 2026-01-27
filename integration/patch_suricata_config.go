@@ -7,38 +7,39 @@ import (
 )
 
 func PatchSuricataConfigFromTemplate(template, current []byte) ([]byte, bool, error) {
-	tpl := splitLines(template)
-	cur := splitLines(current)
+	templateLines := splitLines(template)
+	currentLines := splitLines(current)
 
-	desiredNDPI, err := extractDesiredNDPIPluginLine(tpl)
-	if err != nil {
-		return nil, false, err
+	pluginsBlock, pluginsIndent, ok := findBlock(templateLines, "plugins")
+	if !ok {
+		return nil, false, fmt.Errorf("template does not contain plugins block")
+	}
+	ndpiLine, ok := findNDPIPluginLine(pluginsBlock)
+	if !ok {
+		return nil, false, fmt.Errorf("template does not contain ndpi.so plugin line")
 	}
 
-	desiredUnix, err := extractDesiredUnixCommandKV(tpl)
-	if err != nil {
-		return nil, false, err
-	}
+	unixBlock, _, unixBlockOk := findBlock(templateLines, "unix-command")
 
 	changed := false
 
-	cur, ch, err := ensureUnixCommandBlock(cur, desiredUnix)
+	currentLines, unixChanged, err := ensureBlockExact(currentLines, unixBlock, "unix-command", unixBlockOk)
 	if err != nil {
 		return nil, false, err
 	}
-	if ch {
+	if unixChanged {
 		changed = true
 	}
 
-	cur, ch, err = ensurePluginsNDPI(cur, desiredNDPI)
+	currentLines, pluginsChanged, err := ensurePluginsNDPI(currentLines, pluginsIndent, ndpiLine)
 	if err != nil {
 		return nil, false, err
 	}
-	if ch {
+	if pluginsChanged {
 		changed = true
 	}
 
-	out := strings.Join(cur, "\n")
+	out := strings.Join(currentLines, "\n")
 	if !strings.HasSuffix(out, "\n") {
 		out += "\n"
 	}
@@ -70,278 +71,164 @@ func indentWidth(line string) int {
 	return count
 }
 
-func findTopLevelKey(lines []string, key string) (idx int, baseIndent int, ok bool) {
+func findBlock(lines []string, key string) ([]string, int, bool) {
 	keyLine := key + ":"
-	for i, ln := range lines {
-		if normalizeKey(ln) == keyLine {
-			return i, indentWidth(ln), true
+	for i, line := range lines {
+		if normalizeKey(line) != keyLine {
+			continue
 		}
+		baseIndent := indentWidth(line)
+		block := []string{line}
+		for j := i + 1; j < len(lines); j++ {
+			if lines[j] == "" {
+				block = append(block, lines[j])
+				continue
+			}
+			if indentWidth(lines[j]) <= baseIndent {
+				break
+			}
+			block = append(block, lines[j])
+		}
+		return block, baseIndent, true
 	}
-	return -1, 0, false
+	return nil, 0, false
 }
 
-func findBlockRange(lines []string, keyIdx int) (start int, end int, baseIndent int) {
-	baseIndent = indentWidth(lines[keyIdx])
-	start = keyIdx
-	end = len(lines)
-	for i := keyIdx + 1; i < len(lines); i++ {
-		if lines[i] == "" {
-			continue
-		}
-		if indentWidth(lines[i]) <= baseIndent {
-			end = i
-			break
-		}
-	}
-	return start, end, baseIndent
-}
-
-func extractDesiredNDPIPluginLine(tpl []string) (string, error) {
-	idx, _, ok := findTopLevelKey(tpl, "plugins")
-	if !ok {
-		return "", fmt.Errorf("template does not contain plugins block")
-	}
-	_, end, baseIndent := findBlockRange(tpl, idx)
-	childIndentMin := baseIndent + 1
-
-	for i := idx + 1; i < end; i++ {
-		if tpl[i] == "" {
-			continue
-		}
-		if indentWidth(tpl[i]) < childIndentMin {
-			continue
-		}
-		trim := normalizeKey(tpl[i])
+func findNDPIPluginLine(block []string) (string, bool) {
+	for _, line := range block {
+		trim := normalizeKey(line)
 		if strings.Contains(trim, "ndpi.so") {
-			s := strings.TrimSpace(tpl[i])
-			s = strings.TrimPrefix(s, "#")
-			s = strings.TrimSpace(s)
-			if strings.HasPrefix(s, "-") {
-				s = strings.TrimSpace(strings.TrimPrefix(s, "-"))
-				return "- " + s, nil
-			}
-			return "- " + s, nil
+			return strings.TrimSpace(line), true
 		}
 	}
-	return "", fmt.Errorf("template does not contain ndpi.so plugin line inside plugins block")
+	return "", false
 }
 
-func extractDesiredUnixCommandKV(tpl []string) (map[string]string, error) {
-	idx, _, ok := findTopLevelKey(tpl, "unix-command")
-	if !ok {
-		return nil, fmt.Errorf("template does not contain unix-command block")
-	}
-	_, end, baseIndent := findBlockRange(tpl, idx)
-
-	desired := map[string]string{}
-
-	for i := idx + 1; i < end; i++ {
-		ln := tpl[i]
-		if ln == "" {
+func findBlockRange(lines []string, key string) (start int, end int, baseIndent int, found bool) {
+	keyLine := key + ":"
+	for i := 0; i < len(lines); i++ {
+		if normalizeKey(lines[i]) != keyLine {
 			continue
 		}
-		if indentWidth(ln) <= baseIndent {
-			break
-		}
-
-		n := normalizeKey(ln)
-		col := strings.Index(n, ":")
-		if col <= 0 {
-			continue
-		}
-		k := strings.TrimSpace(n[:col])
-		v := strings.TrimSpace(n[col+1:])
-		if k == "" {
-			continue
-		}
-		desired[k] = v
-	}
-
-	if len(desired) == 0 {
-		return nil, fmt.Errorf("template unix-command block is empty (no key: value lines)")
-	}
-	return desired, nil
-}
-
-func ensureUnixCommandBlock(lines []string, desired map[string]string) ([]string, bool, error) {
-	idx, baseIndent, ok := findTopLevelKey(lines, "unix-command")
-	changed := false
-
-	if !ok {
-		if len(lines) > 0 && lines[len(lines)-1] != "" {
-			lines = append(lines, "")
-		}
-		lines = append(lines, "unix-command:")
-		childIndent := "  "
-		for _, k := range []string{"enabled", "filename", "mode"} {
-			if v, ok := desired[k]; ok {
-				if v == "" {
-					lines = append(lines, childIndent+k+":")
-				} else {
-					lines = append(lines, childIndent+k+": "+v)
-				}
-			}
-		}
-		for k, v := range desired {
-			if k == "enabled" || k == "filename" || k == "mode" {
+		baseIndent = indentWidth(lines[i])
+		start = i
+		end = i + 1
+		for j := i + 1; j < len(lines); j++ {
+			if lines[j] == "" {
+				end = j + 1
 				continue
 			}
-			if v == "" {
-				lines = append(lines, childIndent+k+":")
-			} else {
-				lines = append(lines, childIndent+k+": "+v)
-			}
-		}
-		return lines, true, nil
-	}
-
-	if isCommented(lines[idx]) {
-		lines[idx] = uncommentLine(lines[idx])
-		changed = true
-	}
-
-	start, end, _ := findBlockRange(lines, idx)
-	_ = start
-
-	childIndentWidth := baseIndent + 2
-	childIndent := strings.Repeat(" ", childIndentWidth)
-
-	for _, k := range orderedKeysPreferred(desired) {
-		v := desired[k]
-		found := false
-		for i := idx + 1; i < end; i++ {
-			if lines[i] == "" {
-				continue
-			}
-			if indentWidth(lines[i]) <= baseIndent {
+			if indentWidth(lines[j]) <= baseIndent {
+				end = j
 				break
 			}
-
-			n := normalizeKey(lines[i])
-			if !strings.HasPrefix(n, k+":") {
-				continue
-			}
-
-			found = true
-
-			if isCommented(lines[i]) {
-				lines[i] = uncommentLine(lines[i])
-				changed = true
-			}
-
-			n2 := normalizeKey(lines[i])
-			col := strings.Index(n2, ":")
-			curV := ""
-			if col >= 0 {
-				curV = strings.TrimSpace(n2[col+1:])
-			}
-
-			if strings.TrimSpace(curV) != strings.TrimSpace(v) {
-				if v == "" {
-					lines[i] = childIndent + k + ":"
-				} else {
-					lines[i] = childIndent + k + ": " + v
-				}
-				changed = true
-			}
-
-			break
+			end = j + 1
 		}
-
-		if !found {
-			insertAt := end
-			for insertAt > idx+1 && insertAt <= len(lines) && insertAt-1 < len(lines) {
-				if insertAt-1 < len(lines) && lines[insertAt-1] == "" {
-					insertAt--
-					continue
-				}
-				break
-			}
-
-			newLine := ""
-			if v == "" {
-				newLine = childIndent + k + ":"
-			} else {
-				newLine = childIndent + k + ": " + v
-			}
-
-			lines = append(lines[:insertAt], append([]string{newLine}, lines[insertAt:]...)...)
-			changed = true
-			end++
-		}
+		return start, end, baseIndent, true
 	}
-
-	return lines, changed, nil
+	return 0, 0, 0, false
 }
 
-func orderedKeysPreferred(m map[string]string) []string {
-	var out []string
-	for _, k := range []string{"enabled", "filename", "mode"} {
-		if _, ok := m[k]; ok {
-			out = append(out, k)
+func makeBlockUncommented(block []string) []string {
+	out := make([]string, 0, len(block))
+	for _, ln := range block {
+		if isCommented(ln) {
+			out = append(out, uncommentLine(ln))
+		} else {
+			out = append(out, ln)
 		}
-	}
-	for k := range m {
-		if k == "enabled" || k == "filename" || k == "mode" {
-			continue
-		}
-		out = append(out, k)
 	}
 	return out
 }
-func ensurePluginsNDPI(lines []string, desiredItem string) ([]string, bool, error) {
-	idx, baseIndent, ok := findTopLevelKey(lines, "plugins")
-	changed := false
 
-	desiredItem = strings.TrimSpace(desiredItem)
-	if !strings.HasPrefix(desiredItem, "-") {
-		desiredItem = "- " + strings.TrimSpace(strings.TrimPrefix(desiredItem, "-"))
+func ensureBlockExact(lines []string, tplBlock []string, key string, hasTemplate bool) ([]string, bool, error) {
+	if !hasTemplate {
+		return lines, false, nil
 	}
 
-	if !ok {
-		if len(lines) > 0 && lines[len(lines)-1] != "" {
-			lines = append(lines, "")
+	tpl := makeBlockUncommented(tplBlock)
+
+	start, end, _, found := findBlockRange(lines, key)
+	if found {
+		if sliceEqual(lines[start:end], tpl) {
+			return lines, false, nil
 		}
-		lines = append(lines, "plugins:", "  "+desiredItem)
-		return lines, true, nil
+		newLines := make([]string, 0, len(lines)-(end-start)+len(tpl))
+		newLines = append(newLines, lines[:start]...)
+		newLines = append(newLines, tpl...)
+		newLines = append(newLines, lines[end:]...)
+		return newLines, true, nil
 	}
 
-	if isCommented(lines[idx]) {
-		lines[idx] = uncommentLine(lines[idx])
-		changed = true
+	if len(lines) > 0 && lines[len(lines)-1] != "" {
+		lines = append(lines, "")
+	}
+	lines = append(lines, tpl...)
+	return lines, true, nil
+}
+
+func sliceEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func ensurePluginsNDPI(lines []string, pluginsIndent int, ndpiLine string) ([]string, bool, error) {
+	keyLine := "plugins:"
+	ndpiLine = strings.TrimSpace(ndpiLine)
+	if !strings.HasPrefix(strings.TrimSpace(ndpiLine), "-") {
+		ndpiLine = "- " + ndpiLine
 	}
 
-	_, end, _ := findBlockRange(lines, idx)
-
-	itemIndent := strings.Repeat(" ", baseIndent+2)
-
-	for i := idx + 1; i < end; i++ {
-		if lines[i] == "" {
+	for i, line := range lines {
+		if normalizeKey(line) != keyLine {
 			continue
 		}
-		if indentWidth(lines[i]) <= baseIndent {
-			break
+
+		if isCommented(line) {
+			lines[i] = uncommentLine(line)
 		}
-		n := normalizeKey(lines[i])
-		if strings.Contains(n, "ndpi.so") {
-			if isCommented(lines[i]) {
-				lines[i] = uncommentLine(lines[i])
-				changed = true
+
+		insertAt := i + 1
+		found := false
+		changed := false
+		for j := i + 1; j < len(lines); j++ {
+			if lines[j] == "" {
+				insertAt = j + 1
+				continue
 			}
-			return lines, changed, nil
+			if indentWidth(lines[j]) <= pluginsIndent {
+				insertAt = j
+				break
+			}
+			insertAt = j + 1
+			if strings.Contains(normalizeKey(lines[j]), "ndpi.so") {
+				found = true
+				if isCommented(lines[j]) {
+					lines[j] = uncommentLine(lines[j])
+					changed = true
+				}
+				break
+			}
 		}
+
+		if !found {
+			indent := strings.Repeat(" ", pluginsIndent+2)
+			lines = append(lines[:insertAt], append([]string{indent + ndpiLine}, lines[insertAt:]...)...)
+			changed = true
+		}
+		return lines, changed, nil
 	}
 
-	insertAt := end
-	for insertAt > idx+1 {
-		if insertAt-1 < len(lines) && lines[insertAt-1] == "" {
-			insertAt--
-			continue
-		}
-		break
+	if len(lines) > 0 && lines[len(lines)-1] != "" {
+		lines = append(lines, "")
 	}
-
-	lines = append(lines[:insertAt], append([]string{itemIndent + desiredItem}, lines[insertAt:]...)...)
-	changed = true
-	return lines, changed, nil
+	lines = append(lines, "plugins:", "  "+ndpiLine)
+	return lines, true, nil
 }

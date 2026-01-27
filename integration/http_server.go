@@ -73,7 +73,7 @@ func (r *Runner) registerRoutes(mux *http.ServeMux) {
 		Plan: func(ctx context.Context) (any, error) {
 			r.mu.Lock()
 			defer r.mu.Unlock()
-			return PlanConfig(r.opts.Apply)
+			return PlanConfig(ctx, r.opts.Apply)
 		},
 
 		Apply: func(ctx context.Context) (any, error) {

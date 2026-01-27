@@ -8,8 +8,9 @@ import (
 )
 
 type Deps struct {
-	Plan  func(ctx context.Context) (any, error)
-	Apply func(ctx context.Context) (any, error)
+	Plan      func(ctx context.Context) (any, error)
+	Reconcile func(ctx context.Context) (any, error)
+	Apply     func(ctx context.Context) (any, error)
 
 	EnsureSuricata func(ctx context.Context) error
 	EnableNDPI     func(ctx context.Context) (any, error)
@@ -32,15 +33,29 @@ func (h *Handlers) Health(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) Plan(w http.ResponseWriter, r *http.Request) {
-	if !requireMethod(w, r, http.MethodGet) {
+	switch r.Method {
+	case http.MethodGet:
+		resp, err := h.deps.Plan(r.Context())
+		if err != nil {
+			writeJSONError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, resp)
+		return
+
+	case http.MethodPost:
+		resp, err := h.deps.Reconcile(r.Context())
+		if err != nil {
+			writeJSONError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, resp)
+		return
+
+	default:
+		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	resp, err := h.deps.Plan(r.Context())
-	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	writeJSON(w, http.StatusOK, resp)
 }
 
 func (h *Handlers) Apply(w http.ResponseWriter, r *http.Request) {

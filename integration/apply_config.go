@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -21,38 +19,25 @@ func ApplyConfig(opts ApplyConfigOptions) (ApplyConfigReport, error) {
 }
 
 func ApplyConfigWithContext(ctx context.Context, opts ApplyConfigOptions) (ApplyConfigReport, error) {
-	templatePath := opts.TemplatePath
-	configCandidates := opts.ConfigCandidates
-	socketCandidates := opts.SocketCandidates
 	suricatascPath := opts.SuricataSCPath
-	suricataBinPath := strings.TrimSpace(opts.SuricataBinPath)
 	reloadCommand := opts.ReloadCommand
 	reloadTimeout := opts.ReloadTimeout
-	commandRunner := opts.CommandRunner
-	fs := opts.FS
 
-	if fs == nil {
-		fs = fsutil.OSFS{}
-	}
+	commandRunner := opts.CommandRunner
 	if commandRunner == nil {
 		commandRunner = executil.DefaultRunner{}
 	}
 
-	if suricataBinPath == "" {
-		suricataBinPath = "suricata"
-	}
+	_ = opts.FS
+	_ = fsutil.OSFS{}
 
 	report := ApplyConfigReport{
 		ReloadCommand: reloadCommand,
 		ReloadTimeout: reloadTimeout,
 	}
 
-	logger.Infow("Applying Suricata config (safe apply, no restart)",
-		"template_path", templatePath,
-		"config_candidates", configCandidates,
-		"socket_candidates", socketCandidates,
+	logger.Infow("Applying rules/reload via suricatasc (no YAML changes)",
 		"suricatasc", suricatascPath,
-		"suricata_bin", suricataBinPath,
 		"reload_command", reloadCommand,
 		"reload_timeout", reloadTimeout,
 	)
@@ -62,73 +47,9 @@ func ApplyConfigWithContext(ctx context.Context, opts ApplyConfigOptions) (Apply
 		return report, fmt.Errorf("reload_command=shutdown is forbidden")
 	}
 
-	tmplData, err := fs.ReadFile(templatePath)
-	if err != nil {
-		return report, fmt.Errorf("failed to read template %s: %w", templatePath, err)
-	}
-
-	rendered, rr, err := RenderTemplateStrict(tmplData)
-	if err != nil {
-		return report, fmt.Errorf("failed to render template %s: %w", templatePath, err)
-	}
-	if len(rr.Vars) > 0 {
-		logger.Infow("Template rendered with env vars", "vars", rr.Vars)
-	}
-	tmplData = rendered
-
-	targetConfigPath, err := FirstExistingPath(configCandidates)
-	if err != nil {
-		return report, fmt.Errorf("suricata.yaml not found in candidates: %w", err)
-	}
-	report.TargetConfigPath = targetConfigPath
-
-	currentConfig, err := fs.ReadFile(targetConfigPath)
-	if err != nil {
-		return report, fmt.Errorf("failed to read current config %s: %w", targetConfigPath, err)
-	}
-
-	updatedConfig, changed, err := PatchSuricataConfigFromTemplate(tmplData, currentConfig)
-	if err != nil {
-		return report, fmt.Errorf("failed to patch config %s: %w", targetConfigPath, err)
-	}
-
-	perm := os.FileMode(0o644)
-	if st, statErr := fs.Stat(targetConfigPath); statErr == nil {
-		perm = st.Mode().Perm()
-	}
-
-	if changed {
-		tmpPath := targetConfigPath + ".integration.tmp"
-
-		tmpPath = filepath.Clean(tmpPath)
-
-		if err := writeFileAtomic(tmpPath, updatedConfig, perm, fs); err != nil {
-			return report, fmt.Errorf("failed to write temp config %s: %w", tmpPath, err)
-		}
-
-		vctx := ctx
-		out, verr := commandRunner.CombinedOutput(vctx, suricataBinPath, "-T", "-c", tmpPath)
-		vout := strings.TrimSpace(string(out))
-		if verr != nil {
-			_ = tryRemove(fs, tmpPath)
-			return report, fmt.Errorf("suricata -T failed; config NOT applied. err=%v output=%q", verr, vout)
-		}
-
-		if err := writeFileAtomic(targetConfigPath, updatedConfig, perm, fs); err != nil {
-			_ = tryRemove(fs, tmpPath)
-			return report, fmt.Errorf("failed to write config %s: %w", targetConfigPath, err)
-		}
-
-		_ = tryRemove(fs, tmpPath)
-		logger.Infow("Suricata config updated (validated by -T)", "path", targetConfigPath)
-	} else {
-		logger.Infow("Suricata config already contains required settings", "path", targetConfigPath)
-	}
-
 	if cmdNormalized == "" || cmdNormalized == "none" {
 		report.ReloadStatus = ReloadOK
 		report.Warnings = append(report.Warnings, "reload_command empty/none: reload skipped")
-		logger.Warnw("reload_command empty/none: reload skipped", "reload_command", reloadCommand)
 		return report, nil
 	}
 
@@ -148,19 +69,6 @@ func ApplyConfigWithContext(ctx context.Context, opts ApplyConfigOptions) (Apply
 		report.Warnings = append(report.Warnings,
 			fmt.Sprintf("suricatasc timeout: command=%q timeout=%s", reloadCommand, reloadTimeout),
 		)
-
-		logger.Warnw("suricatasc timed out (restart forbidden). Checking Suricata socket availability",
-			"command", reloadCommand,
-			"timeout", reloadTimeout,
-		)
-
-		if err2 := EnsureSuricataRunning(socketCandidates); err2 != nil {
-			return report, fmt.Errorf("suricatasc timeout and Suricata is not reachable via socket: %w", err2)
-		}
-
-		logger.Warnw("reload not confirmed due to timeout, but Suricata is reachable via socket; continuing",
-			"command", reloadCommand,
-		)
 		return report, nil
 	}
 
@@ -173,33 +81,9 @@ func ApplyConfigWithContext(ctx context.Context, opts ApplyConfigOptions) (Apply
 		report.Warnings = append(report.Warnings,
 			fmt.Sprintf("suricatasc error: command=%q err=%v output=%q", reloadCommand, err, report.ReloadOutput),
 		)
-
-		logger.Errorw("suricatasc failed (restart forbidden)",
-			"command", reloadCommand,
-			"output", report.ReloadOutput,
-			"error", err,
-		)
-
-		if err2 := EnsureSuricataRunning(socketCandidates); err2 != nil {
-			return report, fmt.Errorf("suricatasc failed and Suricata is not reachable via socket: %w", err2)
-		}
-
-		logger.Warnw("reload failed, but Suricata is reachable via socket; continuing",
-			"command", reloadCommand,
-		)
 		return report, nil
 	}
 
 	report.ReloadStatus = ReloadOK
-	logger.Infow("Suricata reload/reconfigure succeeded",
-		"command", reloadCommand,
-		"output", report.ReloadOutput,
-	)
-
 	return report, nil
-}
-
-func tryRemove(fs fsutil.FS, path string) error {
-	_ = os.Remove(path)
-	return nil
 }
