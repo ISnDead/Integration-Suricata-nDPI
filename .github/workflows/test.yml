@@ -26,7 +26,7 @@ jobs:
 
       - name: Make the script files executable
         run: chmod +x rules_validation_script.sh
-      - name: Run the script
+      - name: Logs in the script
         run: ./rules_validation_script.sh
       - name: Commit files
 
