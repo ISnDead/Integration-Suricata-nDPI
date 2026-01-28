@@ -28,3 +28,7 @@ bittorrent-dht
 pop3
 mdns
 snmp
+tcp
+udp
+icmp
+ip
