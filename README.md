@@ -267,7 +267,7 @@ Plan (dry-run, no changes):
 curl http://localhost:8080/plan
 ```
 
-Reconcile (patch config, validate, restart Suricata if needed):
+Reconcile (patch config, validate, restart Suricata if needed): - WIP
 
 ```bash
 curl -X POST http://localhost:8080/plan
