@@ -16,5 +16,6 @@ services:
       - /run/suricata:/run/suricata 
       - /usr/local/bin/suricatasc:/usr/local/bin/suricatasc:ro 
       - /usr/bin/suricata:/usr/bin/suricata:ro 
+      - ./log:/root/log
     restart: unless-stopped
 
