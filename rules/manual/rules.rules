@@ -530,4 +530,4 @@ alert tcp any any -> any any (msg:"Possible exploit attempt detected"; requires:
 alert tcp any any -> any any (msg:"Client contacted malware host"; requires:keyword ndpi-risk; ndpi-risk:NDPI_MALWARE_HOST_CONTACTED; sid:12368;)
 alert tcp any any -> any any (msg:"Binary data transfer attempt"; requires:keyword ndpi-risk; ndpi-risk:NDPI_BINARY_DATA_TRANSFER; sid:12369;)
 alert tcp any any -> any any (msg:"Probing attempt detected"; requires:keyword ndpi-risk; ndpi-risk:NDPI_PROBING_ATTEMPT; sid:12370;)
-alert tcp any any -> any any (msg:"Obfuscated traffic detected"; requires:keyword ndpi-risk; ndpi-risk:NDPI_OBFUSCATED_TRAFFIC; sid:12372;)
+alert tcp any any -> any any (msg:"Obfuscated traffic detected"; requires:keyword ndpi-risk; ndpi-risk:NDPI_OBFUSCATED_TRAFFIC; sid:12371;)
