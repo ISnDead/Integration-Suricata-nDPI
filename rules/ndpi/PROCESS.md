@@ -1,4 +1,4 @@
-### Instructions for developing rules
+# Instructions for developing rules
 A rule/signature consists of the following:
 - the action, determining what happens when the rule matches.
 - the header, defining the protocol, IP addresses, ports and direction of the rule.
