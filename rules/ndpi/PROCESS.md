@@ -84,4 +84,3 @@ Rule options have a specific ordering and changing their order would change the 
 The characters **;** and **"** have special meaning in the Suricata rule language and must be escaped when used in a rule option value. For example:
 **msg:"Message with semicolon\;";**
 As a consequence, you must also escape the backslash, as it functions as an escape character.\
-
