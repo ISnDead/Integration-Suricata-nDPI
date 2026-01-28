@@ -4,7 +4,7 @@ services:
   ndpi:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.integration_service
     ports:
       - "80:8080"
     container_name: ndpi_integration
@@ -17,3 +17,4 @@ services:
       - /usr/local/bin/suricatasc:/usr/local/bin/suricatasc:ro 
       - /usr/bin/suricata:/usr/bin/suricata:ro 
     restart: unless-stopped
+
