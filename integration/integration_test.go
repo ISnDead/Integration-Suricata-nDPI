@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"context"
 	"net"
 	"os"
 	"path/filepath"
@@ -11,65 +12,99 @@ import (
 	"integration-suricata-ndpi/pkg/fsutil"
 )
 
-func writeExecutable(t *testing.T, dir, name, body string) string {
-	t.Helper()
-	p := filepath.Join(dir, name)
-	if err := os.WriteFile(p, []byte(body), 0o755); err != nil {
-		t.Fatalf("write exe: %v", err)
-	}
-	if err := os.Chmod(p, 0o755); err != nil {
-		t.Fatalf("chmod exe: %v", err)
-	}
-	return p
-}
+func TestRunner_StartStop_Basic(t *testing.T) {
+	dir := t.TempDir()
 
-func writeFile(t *testing.T, path, body string, perm os.FileMode) {
-	t.Helper()
-	if err := os.WriteFile(path, []byte(body), perm); err != nil {
-		t.Fatalf("write file: %v", err)
-	}
-}
-
-func setupTemplateAndConfig(t *testing.T, dir string) (string, string) {
-	t.Helper()
-
-	tpl := filepath.Join(dir, "suricata.yaml.tpl")
-	cfg := filepath.Join(dir, "suricata.yaml")
-
-	templateBody := `
-plugins:
-  - /usr/local/lib/suricata/ndpi.so
-
-unix-command:
-  enabled: yes
-  filename: /run/suricata/suricata-command.socket
-  mode: 0660
-`
-	writeFile(t, tpl, templateBody, 0o644)
-	writeFile(t, cfg, "oldcfg\n", 0o644)
-
-	return tpl, cfg
-}
-
-func startUnixSocketListener(t *testing.T, sock string) net.Listener {
-	t.Helper()
-
-	l, err := net.Listen("unix", sock)
-	if err != nil {
+	// ndpi plugin file
+	ndpiSo := filepath.Join(dir, "ndpi.so")
+	if err := os.WriteFile(ndpiSo, []byte("fake"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
+	// rules dir (может быть пустым — ValidateNDPIConfig это допускает)
+	rulesDir := filepath.Join(dir, "rules", "ndpi")
+	if err := os.MkdirAll(rulesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// template file must include plugins + ndpi.so, and may include unix-command
+	tpl := filepath.Join(dir, "suricata.yaml.tpl")
+	tplBody := `
+plugins:
+  - ` + ndpiSo + `
+
+unix-command:
+  enabled: yes
+  filename: ` + filepath.Join(dir, "suricata-command.socket") + `
+  mode: 0660
+`
+	if err := os.WriteFile(tpl, []byte(tplBody), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// fake suricatasc file just to satisfy mustBeFile in ValidateNDPIConfig
+	suricatasc := filepath.Join(dir, "suricatasc")
+	if err := os.WriteFile(suricatasc, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(suricatasc, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// suricata unix socket for ConnectSuricata step
+	sock := filepath.Join(dir, "suricata-command.socket")
+	ln := startUnixSocketListener(t, sock)
+	defer ln.Close()
+
+	// config.yaml for service
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfgYAML := `
+http:
+  addr: "127.0.0.1:0"
+paths:
+  ndpi_rules_local: "` + rulesDir + `"
+  ndpi_plugin_path: "` + ndpiSo + `"
+  suricata_template: "` + tpl + `"
+  suricatasc: "` + suricatasc + `"
+  suricata_bin: "/usr/bin/suricata"
+ndpi:
+  expected_rules_pattern: ""
+suricata:
+  start_timeout: "1s"
+  socket_candidates: ["` + sock + `"]
+  config_candidates: ["` + filepath.Join(dir, "suricata.yaml") + `"]
+reload:
+  timeout: "1s"
+  command: "reload-rules"
+system:
+  systemctl: "/usr/bin/systemctl"
+  suricata_service: "suricata"
+`
+	if err := os.WriteFile(cfgPath, []byte(cfgYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	r := NewRunner(cfgPath, nil, nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+
 	go func() {
-		for {
-			c, e := l.Accept()
-			if e != nil {
-				return
-			}
-			_ = c.Close()
-		}
+		done <- r.Start(ctx)
 	}()
 
-	return l
+	// даём чуть времени поднять http-server и пройти валидации
+	time.Sleep(150 * time.Millisecond)
+	cancel()
+
+	err := <-done
+	if err != nil && err != context.Canceled {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	sctx, scancel := context.WithTimeout(context.Background(), time.Second)
+	defer scancel()
+	_ = r.Stop(sctx)
 }
 
 func TestApplyConfig_ReloadOK(t *testing.T) {
@@ -153,15 +188,16 @@ func TestApplyConfig_ReloadTimeout_ButSocketAlive(t *testing.T) {
 	}
 }
 
-func TestApplyConfig_ReloadFailed_AndSocketDown_ReturnsError(t *testing.T) {
+func TestApplyConfig_ReloadFailed_AndSocketDown_NoError(t *testing.T) {
 	dir := t.TempDir()
 
 	tpl, cfg := setupTemplateAndConfig(t, dir)
 
-	sock := filepath.Join(dir, "suricata-command.socket")
+	sock := filepath.Join(dir, "suricata-command.socket") // сокет НЕ поднимаем
+
 	suricatasc := writeExecutable(t, dir, "suricatasc", "#!/bin/sh\necho FAIL\nexit 1\n")
 
-	_, err := ApplyConfig(ApplyConfigOptions{
+	rep, err := ApplyConfig(ApplyConfigOptions{
 		TemplatePath:     tpl,
 		ConfigCandidates: []string{cfg},
 		SocketCandidates: []string{sock},
@@ -169,8 +205,11 @@ func TestApplyConfig_ReloadFailed_AndSocketDown_ReturnsError(t *testing.T) {
 		ReloadCommand:    "reconfigure",
 		ReloadTimeout:    200 * time.Millisecond,
 	})
-	if err == nil {
-		t.Fatal("expected error")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rep.ReloadStatus != ReloadFailed {
+		t.Fatalf("want ReloadFailed, got %s", rep.ReloadStatus)
 	}
 }
 

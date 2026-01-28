@@ -9,7 +9,7 @@ set -euo pipefail
 #   --config <path>   (default: config/config.yaml)
 #   --verbose
 
-CONFIG_PATH="config/config.yaml"
+CONFIG_PATH="config/integration.yaml"
 MODE="dry-run"
 VERBOSE=0
 

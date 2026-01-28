@@ -14,29 +14,43 @@ RUN go mod download
 COPY ./ .
 
 # Build the statically linked binary
-# Point to main.go
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o app ./cmd/integration/main.go
 
 # Use a minimal Alpine image for the final stage
-FROM alpine:latest
+FROM alpine:3.23.3
 
-# Set the working directory
-WORKDIR /root/
+# Install wget for HEALTHCHECK (minimal package)
+RUN apk add --no-cache wget
+
+# Create a non-root user with a dedicated home directory
+RUN addgroup -S appgroup && \
+    adduser -S appuser -G appgroup -h /home/appuser
+
+# Set working directory to user's home
+WORKDIR /home/appuser
 
 # Copy the binary from the builder stage
-COPY --from=builder /app/app .
+COPY --from=builder /app/app ./app
 
 # Copy default config directory
 COPY ./config ./config
 
-# Create a directory for logs inside the container
+# Create log directory
 RUN mkdir -p ./log
 
-# Ensure the binary is executable
-RUN chmod +x ./app
+# Set proper ownership and minimal permissions
+RUN chown -R appuser:appgroup ./app ./config ./log && \
+    chmod 755 ./app && \
+    chmod 750 ./config ./log
 
+# Switch to non-root user BEFORE exposing ports or setting CMD
+USER appuser
+
+# Application will bind to unprivileged port (8080 is fine for non-root)
 EXPOSE 8080
 
-# Command to run the application
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD wget --quiet --tries=1 --spider http://localhost:8080/health || exit 1
 
-CMD ["./app", "run", "--config", "/root/config/integration.yaml"]
+# Run the application with correct config path
+CMD ["./app", "run", "--config", "./config/integration.yaml"]

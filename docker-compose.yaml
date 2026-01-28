@@ -9,13 +9,13 @@ services:
       - "80:8080"
     container_name: ndpi_integration
     volumes:
-      - ./rules/ndpi:/root/rules/ndpi
+      - ./rules/ndpi:/home/appuser/rules/ndpi
+      - ./log:/home/appuser/log
       - /usr/local/lib/suricata/ndpi.so:/usr/local/lib/suricata/ndpi.so
       - /run/ndpi-agent.sock:/run/ndpi-agent.sock 
       - /etc/suricata:/etc/suricata 
       - /run/suricata:/run/suricata 
       - /usr/local/bin/suricatasc:/usr/local/bin/suricatasc:ro 
       - /usr/bin/suricata:/usr/bin/suricata:ro 
-      - ./log:/root/log
     restart: unless-stopped
 
