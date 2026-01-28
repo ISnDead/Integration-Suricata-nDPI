@@ -22,7 +22,7 @@ This keyword in a signature tells Suricata which protocol it concerns. You can c
 - udp
 - icmp
 - ip (ip stands for 'all' or 'any')
-- 
+
 There are a couple of additional TCP related protocol options:
 - tcp-pkt (for matching content in individual tcp packets)
 - tcp-stream (for matching content only in a reassembled tcp stream)
