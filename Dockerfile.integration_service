@@ -38,4 +38,5 @@ RUN chmod +x ./app
 EXPOSE 8080
 
 # Command to run the application
+
 CMD ["./app", "run", "--config", "/root/config/integration.yaml"]
