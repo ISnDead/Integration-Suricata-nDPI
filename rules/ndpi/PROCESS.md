@@ -22,6 +22,7 @@ This keyword in a signature tells Suricata which protocol it concerns. You can c
 - udp
 - icmp
 - ip (ip stands for 'all' or 'any')
+- 
 There are a couple of additional TCP related protocol options:
 - tcp-pkt (for matching content in individual tcp packets)
 - tcp-stream (for matching content only in a reassembled tcp stream)
@@ -54,5 +55,6 @@ There are also a few so-called application layer protocols, or layer 7 protocols
 - tftp
 - sip
 - websocket
+
 The availability of these protocols depends on whether the protocol is enabled in the configuration file, suricata.yaml.
 If you have a signature with the protocol declared as 'http', Suricata makes sure the signature will only match if the TCP stream contains http traffic.
