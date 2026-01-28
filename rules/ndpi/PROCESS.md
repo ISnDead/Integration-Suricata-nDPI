@@ -90,3 +90,32 @@ Rule options have a specific ordering and changing their order would change the 
 The characters **;** and **"** have special meaning in the Suricata rule language and must be escaped when used in a rule option value. For example:\
 **msg:"Message with semicolon\;";**\
 As a consequence, you must also escape the backslash, as it functions as an escape character.\
+## nDPI keywords
+Surikata has over 370 keywords, once the nDPI plugin is loaded, the following keyword are available:
+- **ndpi-protocol**
+- **ndpi-risk**
+### ndpi-protocol
+Match on the Layer-7 protocol detected by nDPI.
+Note that rules using the **ndpi-protocol** should check if the **ndpi-protocol** keyword exists with **requires**, for example:\
+***requires: keyword ndpi-protocol;***
+
+Syntax:
+***ndpi-protocol:"protocol";***
+
+Where "protocol" is one of the application protocols detected by nDPI. Plase check *ndpiReader -H* for the full list. It is possible to specify the transport protocol, the application protocol, or both (dot-separated).
+### ndpi-risk
+Match on the flow risks detected by nDPI. Risks are potential issues detected by nDPI during the packet dissection and include:
+- known protocol on non-standard port
+- binary application transfer
+- self-signed certificate
+- suspected DGA Domain name
+- malware host contacted
+- and many others...
+Additionally, rules using the **ndpi-risk** keyword should check if the keyword exists using the **requires** keyword, for example:\
+
+***requires: keyword ndpi-risk;***
+
+Syntax:
+***ndpi-risk:"risk";***
+
+Where risk is one (or multiple comma-separated) of the risk codes supported by nDPI. Please check *ndpiReader -H* for the full list.
