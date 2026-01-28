@@ -56,3 +56,24 @@ There are also a few so-called application layer protocols, or layer 7 protocols
 - websocket\
 The availability of these protocols depends on whether the protocol is enabled in the configuration file, suricata.yaml.
 If you have a signature with the protocol declared as 'http', Suricata makes sure the signature will only match if the TCP stream contains http traffic.
+## Source and destination
+The first emphasized part is the traffic source, the second is the traffic destination (note the direction of the directional arrow).
+With the source and destination, you specify the source of the traffic and the destination of the traffic, respectively. You can assign IP addresses, (both IPv4 and IPv6 are supported) and IP ranges. These can be combined with operators:
+- ../.. — IP ranges (CIDR notation)
+- ! — exception/negation
+- [..,..] — grouping\
+Normally, you would also make use of variables, such as $HOME_NET and $EXTERNAL_NET. The suricata.yaml configuration file specifies the IP addresses these concern. The respective $HOME_NET and $EXTERNAL_NET settings will be used in place of the variables in your rules.
+## Ports (source and destination)
+The first emphasized part is the source port, the second is the destination port (note the direction of the directional arrow).
+Traffic comes in and goes out through ports. Different protocols have different port numbers. For example, the default port for HTTP is 80 while 443 is typically the port for HTTPS. Note, however, that the port does not dictate which protocol is used in the communication. Rather, it determines which application is receiving the data.
+In setting ports you can make use of special operators as well. Operators such as:
+- : — port ranges
+- ! — exception/negation
+- [.., ..] — grouping\
+Rule usage examples:
+Some example — Meaning
+- ___
+- ___\
+## Direction
+The directional arrow indicates which way the signature will be evaluated. In most signatures an arrow to the right (->) is used. This means that only packets with the same direction can match. There is also the double arrow (=>), which respects the directionality as ->, but allows matching on bidirectional transactions, used with keywords matching each direction. Finally, it is also possible to have a rule match either directions (<>):
+## Rule options
