@@ -2,10 +2,8 @@
 A rule/signature consists of the following:
 - the action, determining what happens when the rule matches.
 - the header, defining the protocol, IP addresses, ports and direction of the rule.
-- the rule options, defining the specifics of the rule.
-
-An example of a rule is as follows:
-
+- the rule options, defining the specifics of the rule.\
+An example of a rule is as follows:\
 alert http $HOME_NET any -> $EXTERNAL_NET any (msg:"HTTP GET Request Containing Rule in URI"; flow:established,to_server; http.method; content:"GET"; http.uri; content:"rule"; fast_pattern; classtype:bad-unknown; sid:123; rev:1;)
 In this example, red is the action, green is the header and blue are the options.
 ## Action
