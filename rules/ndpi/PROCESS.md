@@ -111,11 +111,11 @@ Match on the flow risks detected by nDPI. Risks are potential issues detected by
 - suspected DGA Domain name
 - malware host contacted
 - and many others...
-Additionally, rules using the **ndpi-risk** keyword should check if the keyword exists using the **requires** keyword, for example:\
 
+Additionally, rules using the **ndpi-risk** keyword should check if the keyword exists using the **requires** keyword, for example:\
 ***requires: keyword ndpi-risk;***
 
 Syntax:
 ***ndpi-risk:"risk";***
 
-Where risk is one (or multiple comma-separated) of the risk codes supported by nDPI. Please check *ndpiReader -H* for the full list.
+Where "risk" is one (or multiple comma-separated) of the risk codes supported by nDPI. Please check *ndpiReader -H* for the full list.
