@@ -6,7 +6,7 @@ A rule/signature consists of the following:
 
 An example of a rule is as follows:\
 alert http $HOME_NET any -> $EXTERNAL_NET any (msg:"HTTP GET Request Containing Rule in URI"; flow:established,to_server; http.method; content:"GET"; http.uri; content:"rule"; fast_pattern; classtype:bad-unknown; sid:123; rev:1;)\
-In this example, red is the action, green is the header and blue are the options.
+In this example, 'alert' "is" the action, green is the header and blue are the options.
 ## Action
 Valid actions are:
 - alert - generate an alert.
@@ -77,3 +77,7 @@ Some example — Meaning
 ## Direction
 The directional arrow indicates which way the signature will be evaluated. In most signatures an arrow to the right (->) is used. This means that only packets with the same direction can match. There is also the double arrow (=>), which respects the directionality as ->, but allows matching on bidirectional transactions, used with keywords matching each direction. Finally, it is also possible to have a rule match either directions (<>):
 ## Rule options
+The rest of the rule consists of options. These are enclosed by parenthesis and separated by semicolons. Some options have settings (such as msg), which are specified by the keyword of the option, followed by a colon, followed by the settings. Others have no settings; they are simply the keyword (such as nocase).
+
+Rule options have a specific ordering and changing their order would change the meaning of the rule.
+
