@@ -1,7 +1,7 @@
 # Integration Suricata + nDPI
 
 Integration Suricata + nDPI automates configuration management for Suricata
-deployments that use the nDPI plugin. It provides a host-side agent (Unix
+Deployments that use the nDPI plugin. It provides a host-side agent (Unix
 socket HTTP API) to enable/disable the plugin safely and an integration
 service for reloadable updates without downtime.
 
@@ -35,7 +35,7 @@ This repository contains:
 - Suricata 8.0.x (built with `--enable-ndpi`).
 - nDPI 4.14.
 
-> **Note**: Package-manager installs may ship non‑nDPI builds. Prefer a stable
+> **Note**: Package-manager installs may ship non-nDPI builds. Prefer a stable
 > source tarball and an explicit configure step.
 
 ## Quick Start
@@ -255,17 +255,36 @@ Default listen address: `http.addr` (example `:8080`).
 
 ### Health
 
-- `curl http://localhost:8080/health`
+```bash
+curl http://localhost:8080/health
+```
 
-### Plan/apply
+### Plan / Apply
 
-- `curl http://localhost:8080/plan`
-- `curl -X POST http://localhost:8080/apply`
+Plan (dry-run, no changes):
+
+```bash
+curl http://localhost:8080/plan
+```
+
+Reconcile (patch config, validate, restart Suricata if needed):
+
+```bash
+curl -X POST http://localhost:8080/plan
+```
+
+Apply (reload rules via `suricatasc`, ensures Suricata via Host Agent first):
+
+```bash
+curl -X POST http://localhost:8080/apply
+```
 
 ### nDPI toggle via integration (delegates to Host Agent)
 
-- `curl -X POST http://localhost:8080/ndpi/enable`
-- `curl -X POST http://localhost:8080/ndpi/disable`
+```bash
+curl -X POST http://localhost:8080/ndpi/enable
+curl -X POST http://localhost:8080/ndpi/disable
+```
 
 ## Operational commands
 
