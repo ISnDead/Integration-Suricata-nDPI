@@ -1,0 +1,41 @@
+# Use the official Golang image for building
+FROM golang:1.25.3-alpine AS builder
+
+# Set the working directory inside the container
+WORKDIR /app
+
+# Copy go.mod and go.sum to manage dependencies
+COPY ./go.mod ./go.sum ./
+
+# Download dependencies
+RUN go mod download
+
+# Copy source code
+COPY ./ .
+
+# Build the statically linked binary
+# Point to main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o app ./cmd/integration/main.go
+
+# Use a minimal Alpine image for the final stage
+FROM alpine:latest
+
+# Set the working directory
+WORKDIR /root/
+
+# Copy the binary from the builder stage
+COPY --from=builder /app/app .
+
+# Copy default config directory
+COPY ./config ./config
+
+# Create a directory for logs inside the container
+RUN mkdir -p ./log
+
+# Ensure the binary is executable
+RUN chmod +x ./app
+
+EXPOSE 8080
+
+# Command to run the application
+CMD ["./app", "run", "--config", "/root/config/integration.yaml"]

@@ -1,0 +1,19 @@
+name: NDPI
+
+services:
+  ndpi:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "80:8080"
+    container_name: ndpi_integration
+    volumes:
+      - ./rules/ndpi:/root/rules/ndpi
+      - /usr/local/lib/suricata/ndpi.so:/usr/local/lib/suricata/ndpi.so
+      - /run/ndpi-agent.sock:/run/ndpi-agent.sock 
+      - /etc/suricata:/etc/suricata 
+      - /run/suricata:/run/suricata 
+      - /usr/local/bin/suricatasc:/usr/local/bin/suricatasc:ro 
+      - /usr/bin/suricata:/usr/bin/suricata:ro 
+    restart: unless-stopped
