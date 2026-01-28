@@ -82,93 +82,104 @@ sudo ./bin/host-agent serve --config config/config.yaml --sock /run/ndpi-agent.s
 ### 1. Install build dependencies
 
 ```bash
-sudo apt-get update
-sudo apt-get install -y \
-  build-essential git \
-  autoconf automake libtool pkg-config gettext \
-  flex bison \
-  libpcap-dev libjson-c-dev libnuma-dev \
-  libpcre2-dev libmaxminddb-dev librrd-dev \
-  libyaml-dev libjansson-dev libmagic-dev \
-  rustc cargo
+sudo apt-get update && sudo apt-get upgrade
+```
+
+```bash
+sudo apt-get -y install libpcre2-dev build-essential autoconf \
+automake libtool libpcap-dev libnet1-dev libyaml-0-2 libyaml-dev \
+pkg-config zlib1g zlib1g-dev libcap-ng-dev libcap-ng0 make \
+libmagic-dev libjansson-dev rustc cargo jq git-core
 ```
 
 ### 2. Build and install nDPI 4.14
 
+Before downloading nDPI, navigate to the folder where you plan to install the nDPI source files.
+
 ```bash
-mkdir -p ~/src && cd ~/src
-
-git clone https://github.com/ntop/nDPI.git
-cd nDPI
-
-git checkout ndpi-4.14
-
-./autogen.sh
-./configure --with-only-libndpi
-make -j"$(nproc)"
-sudo make install
-sudo ldconfig
+git clone -b 4.14-stable https://github.com/ntop/nDPI && cd nDPI
 ```
 
-This installs the nDPI library into default system paths (for example
-`/usr/local/lib`, `/usr/local/include`).
+To make sure that you have downloaded the correct version, run the following command:
+
+```bash
+git status
+```
+
+Configuring nDPI, building and installing
+
+```bash
+./autogen.sh && ./configure --with-only-libndpi
+```
+
+```bash
+sudo make && sudo make install
+```
+
+If you want to test nDPI, run the command:
+
+```bash
+make check
+```
+
+The nDPI module is installed.
 
 ### 3. Download and build Suricata 8.0.2 with nDPI support
 
 ```bash
-cd ~/src
+sudo apt -y install autoconf automake build-essential cargo \
+cbindgen libjansson-dev libpcap-dev libpcre2-dev libtool \
+libyaml-dev make pkg-config rustc zlib1g-dev
 
-wget https://www.openinfosecfoundation.org/download/suricata-8.0.2.tar.gz
-tar xzf suricata-8.0.2.tar.gz
-cd suricata-8.0.2
+```
+
+Before downloading Suricata, navigate to the folder where you plan to install the Suricata source files.
+
+```bash
+wget https://www.openinfosecfoundation.org/download/suricata-8.0.2.tar.gz && \
+tar xzf suricata-8.0.2.tar.gz && cd suricata-8.0.2
 ```
 
 Configure Suricata with nDPI enabled (adjust the nDPI path if needed):
 
 ```bash
-./configure \
-  --enable-ndpi \
-  --with-ndpi=$HOME/src/nDPI \
-  --prefix=/usr \
-  --sysconfdir=/etc \
-  --localstatedir=/var
+./configure --enable-ndpi --with-ndpi=/PATH/TO/FILE/nDPI
 ```
 
 Build and install:
 
 ```bash
-make -j"$(nproc)"
-sudo make install
-sudo ldconfig
+make && make install-full
 ```
 
-After this step you should have:
+### Adding suricata.service to systemd
 
-- `suricata` under `/usr/bin`.
-- `/etc/suricata` configuration directory.
-- `ndpi.so` under `/usr/lib/suricata` or `/usr/local/lib/suricata`.
+Next, run the command that edits the suricata.service file
 
-### 4. Enable the nDPI plugin in Suricata configuration
+```bash
+sed -i '/^ExecStart=/c\ExecStart=/usr/local/bin/suricata -c /usr/local/etc/suricata/suricata.yaml -i enp0s3 --pidfile /usr/local/var/run/suricata.pid'  suricata.service
+```
 
-Ensure the plugin section contains the nDPI shared object:
+Then copy this file to the /etc/systemd/system folder:
+
+```bash
+cp suricata.service /etc/systemd/system
+```
+
+Restart the machine and check the launch status of suricata:
+
+```bash
+sudo systemctl status suricata
+```
+
+If something is wrong, first check if the line for the nDPI module is uncommented in the suricata.yaml file:
 
 ```yaml
 plugins:
   - /usr/lib/suricata/ndpi.so
 ```
 
-Adjust the path if `ndpi.so` is installed under `/usr/local/lib/suricata`.
-
-### 5. Basic verification
-
-```bash
-suricata --build-info
-
-ls -l /usr/lib/suricata/ndpi.so || \
-  ls -l /usr/local/lib/suricata/ndpi.so
-
-sudo suricata -c /etc/suricata/suricata.yaml -T
-```
+We are still in the Suricata source files folder
 
 ## Host Agent
 
