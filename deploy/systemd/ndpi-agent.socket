@@ -1,0 +1,12 @@
+[Unit]
+Description=nDPI Host Agent Socket
+
+[Socket]
+ListenStream=/run/ndpi-agent.sock
+SocketMode=0660
+SocketUser=root
+SocketGroup=suricata
+RemoveOnStop=yes
+
+[Install]
+WantedBy=sockets.target

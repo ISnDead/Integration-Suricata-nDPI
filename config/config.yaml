@@ -1,0 +1,29 @@
+http:
+  addr: ":8080"
+  host_agent_socket: "/run/ndpi-agent.sock"
+  host_agent_timeout: "10s"
+
+paths:
+  ndpi_rules_local: "rules/ndpi/"
+  ndpi_plugin_path: "/usr/local/lib/suricata/ndpi.so"
+  suricata_template: "config/suricata.yaml.tpl"
+  suricatasc: "/usr/local/bin/suricatasc"
+  suricata_bin: "/usr/bin/suricata"
+
+ndpi:
+  expected_rules_pattern: "/var/lib/suricata/rules/ndpi/*.rules"
+
+suricata:
+  start_timeout: "30s"
+  socket_candidates:
+    - "/run/suricata/suricata-command.socket"
+  config_candidates:
+    - "/etc/suricata/suricata.yaml"
+
+reload:
+  timeout: "1m"
+  command: "reload-rules"
+
+system: 
+  systemctl: "/usr/bin/systemctl"
+  suricata_service: "suricata"

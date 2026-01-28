@@ -1,0 +1,196 @@
+package hostagent
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net"
+	"net/http"
+	"os"
+	"syscall"
+	"time"
+
+	"integration-suricata-ndpi/pkg/fsutil"
+	"integration-suricata-ndpi/pkg/logger"
+	"integration-suricata-ndpi/pkg/systemd"
+
+	"github.com/coreos/go-systemd/v22/activation"
+)
+
+type Server struct {
+	deps   Deps
+	ln     net.Listener
+	server *http.Server
+}
+
+func New(deps Deps) (*Server, error) {
+	if deps.SocketPath == "" {
+		return nil, fmt.Errorf("socket path is empty")
+	}
+	if deps.SuricataCfgPath == "" {
+		return nil, fmt.Errorf("suricata config path is empty")
+	}
+	if deps.NDPIPluginPath == "" {
+		return nil, fmt.Errorf("ndpi plugin path is empty")
+	}
+	if deps.SuricataUnit == "" {
+		return nil, fmt.Errorf("suricata unit is empty")
+	}
+
+	if deps.RestartTimeout <= 0 {
+		deps.RestartTimeout = 20 * time.Second
+	}
+	if deps.SuricataConnectTimeout <= 0 {
+		deps.SuricataConnectTimeout = 300 * time.Millisecond
+	}
+
+	if deps.Systemd == nil {
+		deps.Systemd = systemd.NewManager(deps.SystemctlPath, nil)
+	}
+	if deps.FS == nil {
+		deps.FS = fsutil.OSFS{}
+	}
+
+	ln, usingActivation, err := getListener(deps.SocketPath)
+	if err != nil {
+		return nil, err
+	}
+
+	h := NewHandlers(deps)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/health", h.Health)
+
+	mux.HandleFunc("/suricata/ensure", h.SuricataEnsure)
+
+	mux.HandleFunc("/ndpi/status", h.NDPIStatus)
+	mux.HandleFunc("/ndpi/enable", h.NDPIEnable)
+	mux.HandleFunc("/ndpi/disable", h.NDPIDisable)
+	mux.HandleFunc("/suricata/reload", h.SuricataReload)
+
+	s := &http.Server{
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       5 * time.Second,
+		WriteTimeout:      45 * time.Second,
+		IdleTimeout:       30 * time.Second,
+	}
+
+	if usingActivation {
+		logger.Infow("Host-agent uses systemd socket activation", "socket", deps.SocketPath)
+	}
+
+	return &Server{
+		deps:   deps,
+		ln:     ln,
+		server: s,
+	}, nil
+}
+
+func getListener(socketPath string) (net.Listener, bool, error) {
+	listeners, err := activation.Listeners()
+	if err == nil && len(listeners) > 0 {
+		return listeners[0], true, nil
+	}
+
+	if err := removeIfSocket(socketPath); err != nil {
+		return nil, false, err
+	}
+
+	ln, err := net.Listen("unix", socketPath)
+	if err != nil {
+		return nil, false, fmt.Errorf("listen unix %s: %w", socketPath, err)
+	}
+
+	_ = os.Chmod(socketPath, 0o660)
+	return ln, false, nil
+}
+
+func (s *Server) Start(ctx context.Context) error {
+	logger.Infow("Host agent started",
+		"socket", s.deps.SocketPath,
+		"unit", s.deps.SuricataUnit,
+		"suricata_config", s.deps.SuricataCfgPath,
+		"ndpi_plugin", s.deps.NDPIPluginPath,
+		"suricata_socket_candidates", s.deps.SuricataSocketCandidates,
+	)
+
+	errCh := make(chan error, 1)
+	go func() {
+		if err := s.server.Serve(s.ln); err != nil && err != http.ErrServerClosed {
+			errCh <- err
+			return
+		}
+		errCh <- nil
+	}()
+
+	select {
+	case <-ctx.Done():
+		shCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_ = s.Stop(shCtx)
+		return nil
+	case err := <-errCh:
+		return err
+	}
+}
+
+func (s *Server) Stop(ctx context.Context) error {
+	err := s.server.Shutdown(ctx)
+
+	if s.ln != nil {
+		_ = s.ln.Close()
+	}
+
+	return err
+}
+
+func removeIfSocket(path string) error {
+	info, err := os.Lstat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("cannot access socket path %s: %w", path, err)
+	}
+
+	if (info.Mode() & os.ModeSocket) == 0 {
+		return fmt.Errorf("socket path exists but is not a unix socket: %s", path)
+	}
+
+	conn, dialErr := net.DialTimeout("unix", path, 200*time.Millisecond)
+	if dialErr == nil {
+		_ = conn.Close()
+		return fmt.Errorf("unix socket already in use (another process is listening): %s", path)
+	}
+
+	if !isStaleUnixSocketDialError(dialErr) {
+		return fmt.Errorf("cannot remove unix socket %s: dial failed with unexpected error: %w", path, dialErr)
+	}
+
+	if err := os.Remove(path); err != nil {
+		return fmt.Errorf("failed to remove unix socket %s: %w", path, err)
+	}
+	return nil
+}
+
+func isStaleUnixSocketDialError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	var opErr *net.OpError
+	if errors.As(err, &opErr) {
+		var scErr *os.SyscallError
+		if errors.As(opErr.Err, &scErr) {
+			if errno, ok := scErr.Err.(syscall.Errno); ok {
+				return errno == syscall.ECONNREFUSED || errno == syscall.ENOENT
+			}
+		}
+		if errors.Is(opErr.Err, syscall.ECONNREFUSED) || errors.Is(opErr.Err, syscall.ENOENT) {
+			return true
+		}
+	}
+
+	return errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, syscall.ENOENT)
+}
