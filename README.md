@@ -54,6 +54,29 @@ sudo ./bin/integration run --config config/config.yaml
 sudo ./bin/host-agent serve --config config/config.yaml --sock /run/ndpi-agent.sock
 ```
 
+### Run with Docker
+
+The repository includes a `docker-compose.yaml` that starts the integration
+service container and mounts the host resources needed to talk to Suricata and
+the Host Agent.
+
+1. Ensure the Host Agent is running on the host and its socket is available at
+   `/run/ndpi-agent.sock`.
+2. Verify the Suricata config and control socket paths on the host match the
+   mounts in `docker-compose.yaml`.
+3. Start the container:
+
+```bash
+docker compose up --build
+```
+
+To stop the container:
+
+```bash
+docker compose down
+```
+****
+
 ## Configuration
 
 - Main config: `config/config.yaml`.
