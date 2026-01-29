@@ -119,3 +119,6 @@ Syntax:
 ***ndpi-risk:"risk";***
 
 Where "risk" is one (or multiple comma-separated) of the risk codes supported by nDPI. Please check *ndpiReader -H* for the full list.
+
+
+*You can find more information here — https://docs.suricata.io/en/suricata-8.0.2/rules/intro.html#source-and-destination*
