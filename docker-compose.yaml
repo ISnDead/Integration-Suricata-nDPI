@@ -1,4 +1,4 @@
-name: NDPI
+name: ndpi
 
 services:
   ndpi:
@@ -18,4 +18,5 @@ services:
       - /usr/local/bin/suricatasc:/usr/local/bin/suricatasc:ro 
       - /usr/bin/suricata:/usr/bin/suricata:ro 
     restart: unless-stopped
+
 
