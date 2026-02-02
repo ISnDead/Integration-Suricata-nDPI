@@ -50,8 +50,8 @@ go build -o bin/host-agent ./cmd/host-agent
 ### Run
 
 ```bash
-sudo ./bin/integration run --config config/config.yaml
-sudo ./bin/host-agent serve --config config/config.yaml --sock /run/ndpi-agent.sock
+sudo ./bin/integration run --config config/integration.yaml
+sudo ./bin/host-agent serve --config config/integration.yaml --sock /run/ndpi-agent.sock
 ```
 
 ### Run with Docker
