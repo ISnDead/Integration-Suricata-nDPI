@@ -64,7 +64,7 @@ the Host Agent.
    `/run/ndpi-agent.sock`.
 2. Verify the Suricata config and control socket paths on the host match the
    mounts in `docker-compose.yaml`.
-3. 3. Initial docker startup using the build command
+3. Initial docker startup using the build command
 
 ```bash
 docker compose up --build
