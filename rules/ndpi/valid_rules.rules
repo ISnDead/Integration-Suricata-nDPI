@@ -1,4 +1,3 @@
-alert tcp any any -> any any (msg:"Unknown"; requires:keyword ndpi-protocol; ndpi-protocol:Unknown; metadata:mitre_technique_id T1595; sid:100000;)
 alert tcp any any -> any any (msg:"FTP_CONTROL"; requires:keyword ndpi-protocol; ndpi-protocol:FTP_CONTROL; metadata:mitre_technique_id T1046; sid:100001;)
 alert tcp any any -> any any (msg:"POP3"; requires:keyword ndpi-protocol; ndpi-protocol:POP3; metadata:mitre_technique_id T1119; sid:100002;)
 alert tcp any any -> any any (msg:"SMTP"; requires:keyword ndpi-protocol; ndpi-protocol:SMTP; metadata:mitre_technique_id T1119; sid:100003;)
